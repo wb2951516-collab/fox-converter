@@ -48,36 +48,60 @@ async def api_key_guard(request, call_next):
 # ── 文件选择（原生对话框，后台线程） ──────────────────────────────────────────
 def _tk_file_dialog():
     """在子线程中打开 tkinter 多选文件对话框，返回路径列表"""
-    import tkinter as tk
-    from tkinter import filedialog
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    paths = filedialog.askopenfilenames(
-        title='选择 Foxmail 存档文件（可多选）',
-        filetypes=[('Foxmail 存档', '*.fox'), ('所有文件', '*.*')],
-    )
-    root.destroy()
-    return list(paths)
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        paths = filedialog.askopenfilenames(
+            title='选择 Foxmail 存档文件（可多选）',
+            filetypes=[('Foxmail 存档', '*.fox'), ('所有文件', '*.*')],
+        )
+        root.destroy()
+        return list(paths)
+    except Exception as e:
+        # 冻结环境 tkinter 初始化失败时把真实原因带回给前端
+        return {'error': f'文件选择器初始化失败：{type(e).__name__}: {e}'}
 
 
 def _tk_folder_dialog():
     """在子线程中打开文件夹选择对话框"""
-    import tkinter as tk
-    from tkinter import filedialog
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    path = filedialog.askdirectory(title='选择包含 .fox 存档的文件夹')
-    root.destroy()
-    return path
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        path = filedialog.askdirectory(title='选择包含 .fox 存档的文件夹')
+        root.destroy()
+        return path
+    except Exception as e:
+        return {'error': f'文件夹选择器初始化失败：{type(e).__name__}: {e}'}
+
+
+@app.get('/api/tk-test')
+async def tk_test():
+    """tkinter 冻结环境自检：创建并销毁 Tk root，返回详细结果"""
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        root.update()
+        root.destroy()
+        return {'ok': True}
+    except Exception as e:
+        return {'ok': False, 'error': f'{type(e).__name__}: {e}'}
 
 
 @app.post('/api/browse')
 async def browse_file():
     """打开原生多选文件对话框，返回选中的 .fox 文件路径列表"""
     loop = asyncio.get_event_loop()
-    paths = await loop.run_in_executor(None, _tk_file_dialog)
+    result = await loop.run_in_executor(None, _tk_file_dialog)
+    if isinstance(result, dict) and result.get('error'):
+        raise HTTPException(500, result['error'])
+    paths = result or []
     valid = [p for p in paths if is_fox_file(p)]
     skipped = len(paths) - len(valid)
     return {'paths': valid, 'skipped': skipped}
@@ -87,7 +111,10 @@ async def browse_file():
 async def browse_folder():
     """打开文件夹对话框，递归扫描其中全部 .fox"""
     loop = asyncio.get_event_loop()
-    folder = await loop.run_in_executor(None, _tk_folder_dialog)
+    result = await loop.run_in_executor(None, _tk_folder_dialog)
+    if isinstance(result, dict) and result.get('error'):
+        raise HTTPException(500, result['error'])
+    folder = result
     if not folder:
         return {'paths': []}
     valid = [str(p) for p in Path(folder).rglob('*.fox') if is_fox_file(p)]
@@ -258,6 +285,18 @@ async def start_parse(body: dict = Body(...)):
     return {'task_id': task_id}
 
 
+@app.get('/api/parse/state/{task_id}')
+async def parse_state(task_id: str):
+    """普通 JSON 状态查询（供测试脚本/智能体轮询；前端用 SSE 版本）"""
+    task = _tasks.get(task_id)
+    if task is None:
+        raise HTTPException(404, '任务不存在')
+    return {k: task.get(k) for k in
+            ('status', 'file_index', 'file_total', 'filename', 'current', 'total',
+             'subject', 'imported', 'skipped', 'errors', 'elapsed', 'error',
+             'export_dir')}
+
+
 @app.get('/api/parse/status/{task_id}')
 async def parse_status_sse(task_id: str):
     """SSE 流式推送解析进度（批量：文件级 + 邮件级双进度）"""
@@ -382,7 +421,7 @@ async def health():
     stats = _store.stats()
     return {
         'app': 'Fox Converter',
-        'version': '2.1.0',
+        'version': '2.1.1',
         'archives': len(_store.list_archives()),
         'emails': stats.get('total', 0),
         'auth_required': bool(_cfg.get('api_key')),

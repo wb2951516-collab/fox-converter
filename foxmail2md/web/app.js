@@ -341,6 +341,7 @@ async function loadArchives() {
 async function requestDeleteArchive(id) {
   if (state.confirmDeleteId === id) {
     state.confirmDeleteId = null;
+    toast('正在删除存档…');
     await api(`/api/archives/${id}`, { method: 'DELETE' });
     toast('存档已删除');
     if (state.archiveId === id) state.archiveId = 0;
@@ -512,45 +513,48 @@ function openBrowse() {
   $('#parseModal').style.display = 'flex';
 }
 
-function renderPickedList(items, disk) {
-  const box = $('#parseFileList');
-  if (!items.length) { box.style.display = 'none'; return; }
-  box.style.display = 'block';
-  box.innerHTML = items.map((it) => `
-    <div class="picked-row">
-      <span class="picked-name" title="${esc(it.path)}">${esc(it.path.split(/[\\/]/).pop())}</span>
-      <span class="picked-meta num">${fmtSize(it.size)} · ${it.total != null ? it.total + ' 封' : '…'}</span>
-    </div>`).join('');
-  const line = $('#diskLine');
-  if (disk) {
-    line.style.display = 'block';
-    const needTxt = fmtSize(disk.need);
-    const freeTxt = fmtSize(disk.free);
-    const ok = disk.free >= disk.need;
-    line.innerHTML = `导出约需 ${needTxt} · 当前可用 ${freeTxt}` +
-      (ok ? ' <span style="color:var(--success)">✓</span>'
-          : ' <span style="color:var(--danger)">空间不足，请先清理或更换导出目录</span>');
-    $('#startParseBtn').disabled = !ok;
-  } else {
-    line.style.display = 'none';
-  }
-}
-
 async function pickPaths(paths) {
-  const newOnes = paths.filter((p) => p && !pickedPaths.includes(p));
+  const newOnes = paths.filter((p) => p && !pickedPaths.some((v) => v.path === p));
   if (!newOnes.length) return;
   const btns = [$('#browseBtn'), $('#browseFolderBtn'), $('#useManualPathBtn')];
   btns.forEach((b) => (b.disabled = true));
+  const verified = [...pickedPaths];      // {path,size,total}
+  const checking = newOnes.map((p) => ({ path: p, done: false, error: '' }));
+  const box = $('#parseFileList');
+  box.style.display = 'block';
+  const render = () => {
+    box.innerHTML =
+      verified.map((v) => `
+        <div class="picked-row">
+          <span class="picked-name" title="${esc(v.path)}">${esc(v.path.split(/[\\/]/).pop())}</span>
+          <span class="picked-meta num">${fmtSize(v.size)} · ${v.total != null ? v.total + ' 封' : ''}</span>
+        </div>`).join('') +
+      checking.filter((c) => !c.done).map((c) => `
+        <div class="picked-row checking">
+          <span class="picked-name">${esc(c.path.split(/[\\/]/).pop())}</span>
+          <span class="picked-meta">检查中…</span>
+        </div>`).join('') +
+      checking.filter((c) => c.done && c.error).map((c) => `
+        <div class="picked-row checking">
+          <span class="picked-name" style="color:var(--danger)">${esc(c.path.split(/[\\/]/).pop())}</span>
+          <span class="picked-meta">${esc(c.error)}</span>
+        </div>`).join('');
+  };
+  render();
   for (const p of newOnes) {
     try {
       const res = await api(`/api/peek?path=${encodeURIComponent(p)}`);
-      pickedPaths.push(res.path);
+      verified.push({ path: res.path, size: res.size, total: res.total });
     } catch (e) {
-      toast(`跳过 ${p.split(/[\\/]/).pop()}：${e.message}`);
+      const c = checking.find((x) => x.path === p);
+      if (c) { c.done = true; c.error = e.message; }
     }
+    const c = checking.find((x) => x.path === p);
+    if (c) c.done = true;
+    render();
   }
   btns.forEach((b) => (b.disabled = false));
-  // 磁盘空间检查（导出量约等于源文件总量）
+  pickedPaths = verified.map((v) => v.path);
   let disk = null;
   try {
     disk = await api('/api/diskcheck', {
@@ -558,10 +562,17 @@ async function pickPaths(paths) {
       body: JSON.stringify({ paths: pickedPaths }),
     });
   } catch {}
-  renderPickedList(
-    pickedPaths.map((p) => ({ path: p, size: disk?.sizes?.[p] ?? 0, total: disk?.counts?.[p] })),
-    disk,
-  );
+  const line = $('#diskLine');
+  if (disk) {
+    line.style.display = 'block';
+    const ok = disk.free >= disk.need;
+    line.innerHTML = `导出约需 ${fmtSize(disk.need)} · 当前可用 ${fmtSize(disk.free)}` +
+      (ok ? ' <span style="color:var(--success)">✓</span>'
+          : ' <span style="color:var(--danger)">空间不足，请先清理或更换导出目录</span>');
+    $('#startParseBtn').disabled = !ok;
+  } else {
+    line.style.display = 'none';
+  }
   if (pickedPaths.length) $('#startParseBtn').style.display = 'inline-flex';
 }
 
@@ -856,6 +867,13 @@ window.addEventListener('unhandledrejection', (e) => {
 
 async function init() {
   bindEvents();
+  // 探活：服务未运行时显示明确横幅（页面可能是残留标签）
+  try {
+    await api('/api/health');
+  } catch {
+    $('#offlineBanner').style.display = 'flex';
+  }
+  $('#reconnectBtn').addEventListener('click', () => location.reload());
   try {
     const cfg = await api('/api/settings');
     applyTheme(cfg.theme, cfg.accent_color);

@@ -16,7 +16,11 @@ DEFAULT_CONFIG = {
     'api_key': '',
 }
 
-CONFIG_DIR = Path(os.environ.get('APPDATA', str(Path.home()))) / 'foxmail2md'
+# 配置目录：默认 %APPDATA%/foxmail2md；测试可用 FOX2MD_CONFIG_DIR 隔离，
+# 避免 e2e 测试的 save_config 污染真实用户配置
+_CONFIG_DIR_OVERRIDE = os.environ.get('FOX2MD_CONFIG_DIR')
+CONFIG_DIR = (Path(_CONFIG_DIR_OVERRIDE) if _CONFIG_DIR_OVERRIDE
+              else Path(os.environ.get('APPDATA', str(Path.home()))) / 'foxmail2md')
 CONFIG_PATH = CONFIG_DIR / 'config.json'
 
 
@@ -39,7 +43,10 @@ def save_config(cfg: dict):
 
 
 def get_data_dir(cfg: dict = None) -> Path:
-    """数据库与日志所在根目录（可在设置中自定义）"""
+    """数据库与日志所在根目录（可在设置中自定义；测试用环境变量优先）"""
+    env = os.environ.get('FOX2MD_DATA_DIR')
+    if env:
+        return Path(env)
     cfg = cfg or load_config()
     return Path(cfg.get('data_dir') or CONFIG_DIR)
 
@@ -49,6 +56,9 @@ def get_db_path(cfg: dict = None) -> Path:
 
 
 def get_export_dir(cfg: dict = None) -> Path:
+    env = os.environ.get('FOX2MD_EXPORT_DIR')
+    if env:
+        return Path(env)
     cfg = cfg or load_config()
     d = cfg.get('export_dir') or str(Path.home() / 'Documents' / 'foxmail2md_export')
     return Path(d)

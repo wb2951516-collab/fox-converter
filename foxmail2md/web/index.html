@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fox Converter — 邮件存档转换阅读器</title>
-  <link rel="stylesheet" href="styles.css?v=20260910a">
+  <link rel="stylesheet" href="styles.css?v=20260910b">
 </head>
 <body>
 <div id="app" class="app">
@@ -220,6 +220,15 @@
 
 <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-<script src="app.js?v=20260910a"></script>
+<!-- 后端失联横幅：页面是残留标签而服务已停止时给出明确指引 -->
+<div class="offline-banner" id="offlineBanner" style="display:none" role="alert">
+  <div>
+    <strong>Fox Converter 服务未运行</strong>
+    <span>当前页面已与后端失联。请双击桌面图标启动软件，然后点击重新连接。</span>
+  </div>
+  <button class="btn btn-primary" id="reconnectBtn">重新连接</button>
+</div>
+
+<script src="app.js?v=20260910b"></script>
 </body>
 </html>

@@ -932,6 +932,26 @@ input, select { font: inherit; color: inherit; }
 }
 .agent-key-meta { font-size: .75rem; color: var(--text-3); }
 
+/* 后端失联横幅 */
+.offline-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #7f1d1d;
+  color: #fff;
+}
+.offline-banner strong { display: block; font-size: .9375rem; }
+.offline-banner span { font-size: .8125rem; opacity: .9; }
+.offline-banner .btn { background: #fff; color: #7f1d1d; height: 36px; flex-shrink: 0; }
+
+/* 检查中行 */
+.picked-row.checking .picked-name { color: var(--text-3); }
+
 .setting-row { display: grid; gap: 6px; }
 .setting-row label { font-size: .8125rem; font-weight: 600; color: var(--text-2); }
 .setting-row select, .setting-row input[type="text"] {
