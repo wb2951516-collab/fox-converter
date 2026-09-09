@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fox Converter — 邮件存档转换阅读器</title>
+  <link rel="stylesheet" href="styles.css?v=20260910a">
+</head>
+<body>
+<div id="app" class="app">
+
+  <!-- ═══ 左栏：导航 ═══ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22">
+        <path d="M3 7l9 6 9-6M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4"/>
+      </svg>
+      <span class="brand-name">Fox Converter</span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-route="mails" aria-label="邮件列表">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M3 8l9 6 9-6M3 8v8a2 2 0 002 2h14a2 2 0 002-2V8M3 8a2 2 0 012-2h14a2 2 0 012 2"/></svg>
+        <span>邮件</span>
+      </button>
+      <button class="nav-item" data-route="agent" aria-label="Agent 接入">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>
+        <span>Agent 接入</span>
+      </button>
+      <button class="nav-item" data-route="settings" aria-label="设置">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m11-11h-6m-10 0H1m17.66-7.07l-4.24 4.24M7.58 16.42l-4.24 4.24m0-16.97l4.24 4.24m8.48 8.48l4.24 4.24"/></svg>
+        <span>设置</span>
+      </button>
+    </nav>
+    <div class="sidebar-archives">
+      <div class="side-title">存档</div>
+      <div id="archiveList"></div>
+    </div>
+    <div class="sidebar-stats" id="sidebarStats"></div>
+    <button class="nav-item parse-btn" id="openParseBtn">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5-5 5 5M12 5v12"/></svg>
+      <span>导入 .fox 文件</span>
+    </button>
+  </aside>
+
+  <!-- ═══ 中栏：邮件列表 ═══ -->
+  <section class="list-panel" id="listPanel">
+    <div class="list-header">
+      <div class="search-box">
+        <svg class="icon search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="search" id="searchInput" placeholder="搜索邮件…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="sort-select">
+        <select id="groupSelect" aria-label="分组方式">
+          <option value="">不分组</option>
+          <option value="subject">按主题</option>
+          <option value="from">按发件人</option>
+          <option value="to">按收件人</option>
+        </select>
+      </div>
+      <div class="sort-select" id="sortWrap">
+        <select id="sortSelect" aria-label="排序方式">
+          <option value="date_desc">最新优先</option>
+          <option value="date_asc">最早优先</option>
+          <option value="subject">按主题</option>
+        </select>
+      </div>
+    </div>
+    <div class="list-items" id="mailList" aria-label="邮件列表"></div>
+    <div class="list-footer" id="listFooter"></div>
+  </section>
+
+  <!-- ═══ 右栏：阅读区 ═══ -->
+  <main class="reader-panel" id="readerPanel">
+    <div class="reader-empty" id="readerEmpty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48" style="opacity:.3"><path d="M3 7l9 6 9-6M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4"/></svg>
+      <p>从左侧选择一封邮件</p>
+    </div>
+    <div class="reader-active" id="readerActive" style="display:none">
+      <div class="reader-toolbar">
+        <div class="reader-meta" id="readerMeta"></div>
+        <div class="view-tabs" role="tablist">
+          <button class="tab active" data-view="html" role="tab">原文</button>
+          <button class="tab" data-view="md" role="tab">Markdown</button>
+          <button class="tab" data-view="text" role="tab">纯文本</button>
+          <button class="tab att-tab" data-view="atts" role="tab" style="display:none">附件</button>
+        </div>
+        <button class="icon-btn" id="copyBtn" aria-label="复制正文" title="复制当前视图内容">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
+      </div>
+      <div class="reader-body" id="readerBody"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══ 解析对话框 ═══ -->
+<div class="modal-backdrop" id="parseModal" style="display:none">
+  <div class="modal" role="dialog" aria-label="导入 .fox 文件">
+    <div class="modal-header">
+      <h2>导入 Foxmail 存档</h2>
+      <button class="icon-btn" id="parseCloseBtn" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="parseModalBody">
+      <div class="parse-step" id="parseStepSelect">
+        <p class="parse-hint">选择 Foxmail 存档文件（.fox），支持多选与整个文件夹</p>
+        <div class="browse-row">
+          <button class="btn btn-primary" id="browseBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 7l9 6 9-6M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4"/></svg>
+            选择文件…
+          </button>
+          <button class="btn" id="browseFolderBtn">选择文件夹…</button>
+        </div>
+        <div class="parse-manual">
+          <input type="text" id="manualPath" placeholder="或粘贴 .fox 完整路径（多个用换行/分号分隔）" spellcheck="false">
+          <button class="btn" id="useManualPathBtn">添加</button>
+        </div>
+        <div class="parse-file-list" id="parseFileList" style="display:none"></div>
+        <div class="disk-line num" id="diskLine" style="display:none"></div>
+        <button class="btn btn-primary" id="startParseBtn" style="display:none">开始导入</button>
+      </div>
+      <div class="parse-step" id="parseStepProgress" style="display:none">
+        <div class="progress-file num" id="progressFile"></div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <p class="progress-text" id="progressText">准备中…</p>
+        <p class="progress-sub" id="progressSub"></p>
+        <div class="done-files num" id="doneFiles"></div>
+      </div>
+      <div class="parse-step" id="parseStepDone" style="display:none">
+        <p class="done-text" id="doneText"></p>
+        <button class="btn btn-primary" id="doneCloseBtn">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 设置面板 ═══ -->
+<div class="settings-panel" id="settingsPanel" style="display:none">
+  <div class="settings-header">
+    <h2>设置</h2>
+    <button class="icon-btn" id="settingsCloseBtn" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="settings-body">
+    <div class="setting-row">
+      <label for="settingTheme">界面风格</label>
+      <select id="settingTheme">
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label for="settingAccent">主题色</label>
+      <input type="color" id="settingAccent" value="#2563eb">
+    </div>
+    <div class="setting-row">
+      <label for="settingBrowser">打开方式</label>
+      <select id="settingBrowser">
+        <option value="default">系统默认浏览器</option>
+        <option value="chrome">Chrome（独立窗口）</option>
+        <option value="edge">Edge（独立窗口）</option>
+      </select>
+    </div>
+    <div class="setting-section-title">存储位置</div>
+    <div class="setting-row">
+      <label>存档数据（数据库）<span class="num" id="dataSizeLabel"></span></label>
+      <div class="path-row">
+        <input type="text" id="settingDataDir" placeholder="默认在 %APPDATA%\foxmail2md" spellcheck="false" readonly>
+        <button class="btn btn-sm" id="browseDataDirBtn">浏览…</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <label>导出目录（MD/纯文本/附件）<span class="num" id="exportSizeLabel"></span></label>
+      <div class="path-row">
+        <input type="text" id="settingDir" placeholder="默认在文档目录下" spellcheck="false" readonly>
+        <button class="btn btn-sm" id="browseExportDirBtn">浏览…</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="migrateBtn" style="width:100%;justify-content:center">迁移到新位置</button>
+    <p class="setting-note" id="migrateNote">数据库迁移完成后需重启软件生效；导出目录迁移在后台复制完成后自动切换并删除旧目录。</p>
+    <div class="progress-bar" id="migrateProgressBar" style="display:none">
+      <div class="progress-fill" id="migrateProgressFill"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Agent 接入面板 ═══ -->
+<div class="settings-panel" id="agentPanel" style="display:none">
+  <div class="settings-header">
+    <h2>Agent 接入</h2>
+    <button class="icon-btn" id="agentCloseBtn" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="settings-body">
+    <div class="agent-stats num" id="agentStats"></div>
+    <div class="agent-step">
+      <div class="agent-step-title">第 1 步 · 复制提示词，发给你的智能体以安装技能</div>
+      <div class="agent-prompt" id="agentPrompt"></div>
+      <button class="btn btn-primary" id="copyPromptBtn" style="width:100%;justify-content:center">一键复制提示词</button>
+    </div>
+    <div class="agent-step">
+      <div class="agent-step-title">第 2 步 · 复制 API Key，发给智能体以完成配置</div>
+      <div class="agent-key-row">
+        <code class="agent-key num" id="agentKey"></code>
+        <button class="icon-btn" id="copyKeyBtn" aria-label="复制 Key" title="复制 Key">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
+      </div>
+      <div class="agent-key-meta">状态：有效 · 长期有效（重新生成后旧 Key 立即失效）</div>
+      <button class="btn" id="regenKeyBtn" style="width:100%;justify-content:center">重新获取</button>
+    </div>
+    <p class="setting-note">提示词中的下载地址指向本机服务，智能体需与 Fox Converter 在同一台电脑；跨机访问请用本机局域网 IP 并开放防火墙。已兼容 openclaw 系（WinClaw）与 Claude/AgentSkills 规范。</p>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script src="app.js?v=20260910a"></script>
+</body>
+</html>

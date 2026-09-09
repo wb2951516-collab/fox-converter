@@ -1,0 +1,6 @@
+# 运行时依赖
+fastapi>=0.110
+uvicorn>=0.29
+markdownify>=0.13
+pystray>=0.19
+pillow>=10.0

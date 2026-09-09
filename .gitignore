@@ -1,0 +1,28 @@
+# 用户数据与涉密内容（绝不入库）
+*.fox
+output*/
+*.db
+*.db-shm
+*.db-wal
+logs/
+
+# 构建产物
+dist/
+build/
+installer/build/
+*.spec.bak
+
+# 工具与本地配置
+openspec/
+.comet/
+.claude/
+.mimosa/
+.zcode/
+__pycache__/
+*.pyc
+
+# >>> Comet managed project state >>>
+!/.comet/
+/.comet/*
+!/.comet/config.yaml
+# <<< Comet managed project state <<<
