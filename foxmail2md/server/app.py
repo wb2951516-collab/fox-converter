@@ -118,6 +118,7 @@ async def disk_check(body: dict = Body(...)):
         except OSError:
             continue
     export_root = get_export_dir(load_config())
+    export_root.mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(str(export_root)).free
     need = total * 1.2
     return {'sizes': sizes, 'counts': counts, 'need': need, 'free': free,
@@ -231,7 +232,9 @@ async def start_parse(body: dict = Body(...)):
         raise HTTPException(400, f'存在非 .fox 存档文件：{Path(bad[0]).name}')
 
     # 磁盘空间检查：导出内容约与源文件相当，剩余不足 1.15 倍时拒绝
+    # 注意：先重建导出根目录（可能被用户清理删除），disk_usage 才不会抛路径不存在
     export_root = get_export_dir(load_config())
+    export_root.mkdir(parents=True, exist_ok=True)
     need = sum(os.path.getsize(p) for p in paths) * 1.15
     free = shutil.disk_usage(str(export_root)).free
     if free < need:

@@ -73,6 +73,19 @@ def main(no_tray: bool = False):
 
     print(f'Fox Converter 启动中… {url}')
 
+    # 单实例保护：已有健康实例在跑 → 直接打开界面退出，不再抢端口
+    if _port_ok(port):
+        if _health_ok(port):
+            print('检测到 Fox Converter 已在运行，直接打开界面')
+            _open_in_browser(url, cfg.get('browser', 'default'))
+            return
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(
+            0, f'端口 {port} 已被其他程序占用，无法启动。\n'
+               f'请更换端口（设置 → 端口）或结束占用该端口的程序。',
+            'Fox Converter', 0x10)
+        return
+
     # 服务线程 + 启动监督：失败必须可见，绝不留下无服务的托盘僵尸
     supervisor = threading.Thread(
         target=_server_supervisor, args=(port, url, cfg), daemon=True)
@@ -101,6 +114,19 @@ def _port_ok(port: int) -> bool:
         return False
     finally:
         s.close()
+
+
+def _health_ok(port: int) -> bool:
+    """确认端口上跑的是本程序（/api/health 返回 200）"""
+    import http.client
+    conn = http.client.HTTPConnection('127.0.0.1', int(port), timeout=2)
+    try:
+        conn.request('GET', '/api/health')
+        return conn.getresponse().status == 200
+    except Exception:
+        return False
+    finally:
+        conn.close()
 
 
 def _server_supervisor(port: int, url: str, cfg: dict):
