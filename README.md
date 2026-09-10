@@ -10,7 +10,9 @@
 
 [English](#english) | 中文
 
-![主界面](docs/screenshots/main-light.png)
+| 浅色 · 阅读与附件 | 深色模式 | 英文界面 |
+|---|---|---|
+| ![主界面](docs/screenshots/main-light.png) | ![深色](docs/screenshots/dark-en.png) | ![附件](docs/screenshots/attachments.png) |
 
 ## 它解决什么问题
 
