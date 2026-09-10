@@ -1,139 +1,124 @@
-# Fox Converter — Foxmail 存档(.fox)转 Markdown 阅读器
+# Fox Converter
 
-将 Foxmail 邮件存档（`.fox`）一键转换为 Markdown + 附件，并提供本地 Web 阅读界面。可直接对接 openclaw 等 AI 工具做向量化入库（RAG）。
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightblue)](https://github.com/wb2951516-collab/fox-converter/releases)
+[![Release](https://img.shields.io/badge/download-latest-green)](https://github.com/wb2951516-collab/fox-converter/releases)
 
-> 内部数据目录为 `%APPDATA%\foxmail2md`（历史原因），与显示名称 Fox Converter 指向同一软件。
+**把 Foxmail 的 .fox 存档直接变成可阅读、可搜索、可喂给 AI 的 Markdown。**
+
+不装 Foxmail、不手动导出——拖入 .fox 文件，得到带全文搜索的本地阅读界面，外加结构化的 Markdown / 纯文本 / 附件目录，方便接入 RAG 知识库。
+
+[English](#english) | 中文
+
+![主界面](docs/screenshots/main-light.png)
+
+## 它解决什么问题
+
+Foxmail 的「邮件存档」功能生成的 .fox 文件是个封闭格式：换电脑、清邮箱之前想把自己多年的邮件完整备份成通用格式，官方没有给出路。市面上的商业转换器按封收费、还要上传邮件。
+
+Fox Converter 在本地把 .fox 拆开——里面其实是标准的邮件数据——转成 Markdown + 纯文本 + 附件目录，并附带一个本地阅读界面和全文搜索。
 
 ## 功能
 
-- **双击即用**：`FoxConverter.exe` 启动内置服务并自动打开界面（支持 Chrome/Edge 独立窗口模式）
-- **便捷转换**：界面里选择 `.fox` 文件（支持文件选择器或直接粘贴路径）→ 实时进度 → 完成立即可读
-- **三栏阅读器**：
-  - 邮件列表：**全文搜索**（中文友好）+ 排序 + **分组**（按主题 / 发件人 / 收件人，主题自动归并 Re:/转发: 会话链）+ 分页
-  - 阅读区四个视图：**原文**（全宽自适应、内嵌图直接显示）/ **Markdown** / **纯文本** / **附件**（有附件时出现，列出文件名与下载按钮）
-  - 一键复制当前视图内容
-- **批量导出**：`markdown/` 区（`*.md` + YAML front matter）+ `plaintext/` 区（`*.txt` 纯文本含邮件头摘要）+ `attachments/` 附件目录 + `manifest.json` 索引
-- **深浅色主题**、主题色自定义、设置持久化
-- **CLI 批处理** + 系统托盘（打开界面 / 打开导出目录 / 退出）
+- **一键导入**：支持选择多个 .fox 文件或整个文件夹，批量转换带双层进度
+- **本地阅读界面**：邮件列表（中文全文搜索 / 按主题-发件人-收件人分组）+ 三种正文视图（原文 / Markdown / 纯文本）+ 附件独立下载
+- **结构化导出**：`markdown/`（YAML front matter）+ `plaintext/`（含邮件头摘要的 txt）+ `attachments/`，`manifest.json` 索引全部邮件——直接对接 openclaw / WinClaw 等 AI 工具的 RAG 流程
+- **存档管理**：已导入存档独立管理，跨存档 Message-ID 去重，按存档删除
+- **存储位置自定义**：数据库与导出文件可放到任意磁盘，支持在线迁移
+- **查找清理**：按发件人 / 主题 / 日期区间 / 大小筛选，双模式删除（连文件删除 / 仅移出索引）
+- **Agent 接入**：内置技能生成器，智能体（WinClaw / Claude 等）复制提示词即可接入，读取邮件内容
+- **细节**：深浅色主题、GBK/GB18030/UTF-8/UTF-16 编码容错、单实例、应用窗口居中
 
 ## 快速开始
 
-### 方式一：直接运行 exe
+1. 从 [Releases](https://github.com/wb2951516-collab/fox-converter/releases) 下载 `FoxConverter_Setup.exe` 安装（无需管理员权限）
+2. 首次打开：按引导把存储位置设到空间够的盘（不设置无法导入）
+3. 点「导入 .fox 文件」，选择存档，等待转换完成
+4. 开始阅读、搜索，或把导出目录接入你的 AI 工具
 
-```
-dist/FoxConverter.exe       # 双击即可
-```
+想先看看效果？仓库自带 [examples/demo.fox](examples/demo.fox)（3 封虚构邮件），导入它即可体验完整流程。
 
-### 方式二：源码运行
+## 从源码运行
 
 ```bash
 pip install -r requirements.txt
 python run.py
 ```
 
-### CLI 批量转换
+批量转换：
 
 ```bash
 python -m foxmail2md 存档.fox -o ./output              # 全量
-python -m foxmail2md 存档.fox -o ./output --limit 20   # 测试前 20 封
-python -m foxmail2md 存档.fox -o ./output --incremental # 增量（Message-ID 去重）
+python -m foxmail2md 存档.fox -o ./output --incremental # 增量（去重）
 ```
 
-## 使用流程
-
-1. 启动后点击左下角 **「导入 .fox 文件」**
-2. 文件选择器选中存档（或粘贴完整路径后点「使用」）
-3. **「开始转换」**，等待进度完成（实测 1.18GB / 1108 封约 60~90 秒）
-4. 左侧列表浏览邮件（可切换分组方式）；点击阅读
-5. 阅读区切换 原文 / Markdown / 纯文本 / 附件；附件视图内可下载
-
-## 导出结果结构（供 RAG 入库）
+## 导出结构（给 RAG 的建议）
 
 ```
-output/
-├── manifest.json                  # 全部邮件索引（供程序消费）
-├── 20260817_主题_hash.md          # Markdown 区
-├── ...                            # 每封邮件一个 .md
-├── plaintext/
-│   └── 20260817_主题_hash.txt     # 纯文本区（含邮件头摘要，AI 单文件可读）
-└── attachments/
-    └── <hash>/                    # 每封邮件的附件（含内嵌图）
-        ├── 报表.xlsx
-        └── image001.png
+导出目录/
+├── manifest.json          # 全部邮件的元数据索引
+├── *.md                   # Markdown 区（YAML front matter）
+├── plaintext/*.txt        # 纯文本区（含邮件头摘要）
+└── attachments/<hash>/    # 附件原文件
 ```
 
-`manifest.json` 每条含 `md_file`、`text_file`、`attachment_files`、`inline_files`、主题/发件人/日期等字段。
+`plaintext/` 喂 embedding，`manifest.json` 里的 subject / from / date 做结构化过滤，`attachments/` 里的 Office/PDF 按需单独解析。
 
-### 对接 openclaw / RAG 的建议
+## 工作原理
 
-- **分区入库**：`plaintext/` 喂 embedding（干净文本），`*.md` 用于人读与展示
-- **切片**：按邮件整封切片，manifest 字段作元数据随向量存储
-- **检索增强**：`subject`/`from`/`date` 做结构化过滤字段
-- **附件**：Office/PDF 附件按 `attachment_files` 路径单独做文档解析
+.fox 是 Foxmail 的专有容器。经分析：文件头为 `ARCF` 魔数，之后每封邮件以 16 字节定界符开始，内容是未加密的标准 RFC 822 MIME。本工具据此流式切分（mmap + 魔数定位），逐封交给 Python 标准库解析。细节见 [docs/fox-format.md](docs/fox-format.md)。
 
-## 智能体接入（Agent Skills）
+## Agent 接入
 
-让 openclaw 系智能体（WinClaw 小龙虾等）、Claude 等直接读取已导入的邮件：
+「Agent 接入」页一键复制提示词和 API Key 发给你的智能体，装好技能后直接对话：
 
-1. 打开软件左侧 **「Agent 接入」** 页
-2. **复制提示词** 粘贴给你的智能体——它会自动下载并安装技能（`/skill/download`）
-3. **复制 API Key** 发给智能体完成配置（长期有效，可随时重新生成）
+> "帮我找一下九月关于项目验收的邮件，总结要点。"
 
-之后即可对智能体说"搜一下关于 XX 的邮件""把这封邮件的附件取出来"。
+技能兼容 AgentSkills 规范（openclaw / WinClaw / Claude 等），走本地 HTTP API，数据不出你的电脑。
 
-也可以手动安装：技能文件在 `foxmail2md/skill/SKILL.md`（兼容 AgentSkills 规范），或直接调用本地 HTTP API（`/api/health` 探活，`/api/mails?search=` 搜索，详情含 `body_md` 与附件路径）。
+## 兼容性
 
-## 设置
+在 1.18 GB / 1108 封真实存档上验证：解析成功率 100%，附件（含中文名、内嵌图）完整还原，乱码率 0.09%。已适配 GBK / GB2312 / UTF-8 / UTF-16 及 Outlook 系邮件的怪癖。
 
-| 设置项 | 说明 |
-|---|---|
-| 界面风格 | 浅色 / 深色（深色下邮件原文自动置于浅色卡片保证可读） |
-| 主题色 | 任意颜色 |
-| 打开方式 | 系统默认浏览器 / Chrome / Edge 的 `--app` 独立窗口 |
-| 导出目录 | 默认 `文档/foxmail2md_export/<存档名>/`（修改后立即对下次解析生效） |
+## 参与贡献
 
-## 性能与质量（1.18GB 真实存档实测）
+Issue、PR 都欢迎。修 bug 请附带日志（`%APPDATA%\foxmail2md\logs\app.log`，注意脱敏）。
 
-| 指标 | 数值 |
-|---|---|
-| 邮件解析 | 1108/1108 成功（100%） |
-| 主题分组 | 1108 封归并为 673 个会话主题 |
-| 附件 | 763 个（724MB），中文名/内嵌图正常 |
-| 编码容错 | GBK/GB18030/UTF-8/UTF-16，乱码率 0.09% |
+## 许可与声明
 
-## .fox 格式（逆向成果）
+本项目基于 [GPL-3.0](LICENSE) 开源。
 
-详见 [docs/fox-format.md](docs/fox-format.md)。要点：文件头 `ARCF` 魔数 + 索引区；每封邮件前有 16 字节魔数 `10×7 11×6 53 0D 0A`，其后是**明文标准 RFC822 MIME**。本工具据此流式 carve，无需安装 Foxmail。
+- 本项目与腾讯 / Foxmail 官方无关，仅为个人数据互操作工具
+- .fox 格式信息来自对自有存档的逆向分析，仅用于读取你自己拥有的数据
+- 请勿用于处理不属于你或无权处理的邮件数据；使用本项目产生的任何后果由使用者自行承担
 
-## 项目结构
+---
 
-```
-foxmail2md/
-├── core/
-│   ├── fox_parser.py    # .fox 流式解析（mmap + 魔数 carve）
-│   ├── mail_parser.py   # MIME → 结构化邮件（编码容错/内嵌图/附件）
-│   ├── exporter.py      # 导出（md/plaintext 双区/cid 替换/去重）
-│   └── store.py         # SQLite 索引 + 中文搜索
-├── server/app.py        # FastAPI（解析进度 SSE/列表分组/附件下载/设置）
-├── web/                 # 前端（三栏布局，原生 JS，无构建链）
-├── config.py            # 配置持久化
-├── launcher.py          # 启动器（浏览器 + 托盘）
-└── cli.py               # 命令行入口
-```
+<a name="english"></a>
+## English
 
-## 从源码打包
+**Convert Foxmail .fox archives into readable, searchable, AI-ready Markdown — locally.**
 
-```bash
-pip install -r requirements-build.txt
-python tools/make_icon.py
-pyinstaller --onefile --noconsole --name FoxConverter --icon assets/icon.ico ^
-  --add-data "foxmail2md/web;web" --add-data "assets;assets" ^
-  --hidden-import pystray._win32 entry.py
-```
+Foxmail's archive feature (.fox files) is a closed format with no official export path. Fox Converter unpacks it on your machine (the contents are plain RFC 822 MIME behind a thin container), renders a local reading UI with full-text search, and exports structured Markdown / plain text / attachments for RAG pipelines.
 
-## 注意事项
+### Features
 
-- 本工具只读解析 `.fox`，不改动原文件
-- 存档包含完整邮件与附件，**注意隐私**：接入 RAG 前请确认部署环境访问控制
-- Windows 下首次运行如被杀软拦截，为 PyInstaller 单文件常见误报，加白名单即可
-- 若浏览器显示异常（旧缓存），Ctrl+F5 强制刷新一次即可
+- Batch import of .fox files (multi-select or whole folders) with dual-level progress
+- Local web UI: mail list (Chinese full-text search, thread grouping by subject/sender/recipient), original HTML / Markdown / plain-text views, per-mail attachment downloads
+- Structured export: `markdown/` + `plaintext/` + `attachments/` + `manifest.json` — ready for openclaw / WinClaw / Claude RAG workflows
+- Archive management with cross-archive Message-ID dedup, per-archive deletion
+- Relocatable data & export directories with online migration
+- Conditional find & cleanup with two delete modes (index-only / full wipe)
+- Built-in agent skill generator (API key auth, AgentSkills-compatible)
+
+### Quick start
+
+Download `FoxConverter_Setup.exe` from [Releases](https://github.com/wb2951516-collab/fox-converter/releases), install (no admin required), point the storage location to a roomy drive, and import your `.fox` archives. A sample archive ([examples/demo.fox](examples/demo.fox), 3 fictional emails) is included for a quick tour.
+
+### How it works
+
+The .fox container starts with an `ARCF` magic; each message is prefixed by a 16-byte delimiter followed by plain RFC 822 MIME. The tool memory-maps the file, carves messages by delimiter, and parses them with Python's standard library. See [docs/fox-format.md](docs/fox-format.md).
+
+### License & disclaimer
+
+GPL-3.0. Not affiliated with Tencent / Foxmail. Format notes come from analyzing my own archives and are provided for personal data interoperability only — use it on data you own.
