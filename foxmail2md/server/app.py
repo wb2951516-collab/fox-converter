@@ -23,8 +23,7 @@ from ..config import (load_config, save_config, get_export_dir, get_data_dir,
 # ── 全局状态 ──
 app = FastAPI(title='Fox Converter')
 _tasks = {}  # task_id -> {status, progress, total, current_subject, error, source}
-_cfg = load_config()
-_store = Store(get_db_path(_cfg))
+_store = Store(get_db_path(load_config()))
 
 WEB_DIR = Path(getattr(sys, '_MEIPASS', str(Path(__file__).resolve().parent.parent))) / 'web'
 SKILL_DIR = Path(getattr(sys, '_MEIPASS', str(Path(__file__).resolve().parent.parent))) / 'skill'
@@ -36,10 +35,11 @@ async def api_key_guard(request, call_next):
     path = request.url.path
     if path.startswith('/api/') and path != '/api/health':
         origin = request.headers.get('origin', '')
-        same_origin = origin in ('', f'http://127.0.0.1:{_cfg.get("port", 8732)}',
-                                 f'http://localhost:{_cfg.get("port", 8732)}')
+        port_now = load_config().get('port', 8732)
+        same_origin = origin in ('', f'http://127.0.0.1:{port_now}',
+                                 f'http://localhost:{port_now}')
         if not same_origin:
-            key = _cfg.get('api_key', '')
+            key = load_config().get('api_key', '')
             if key and request.headers.get('x-api-key') != key:
                 return JSONResponse({'detail': 'API Key 无效或缺失'}, status_code=401)
     return await call_next(request)
@@ -240,8 +240,9 @@ def _parse_worker(task_id: str, paths: list):
 
         task['status'] = 'cancelled' if task.get('cancelled') else 'done'
         task['elapsed'] = time.time() - t0
-        _cfg['last_source'] = paths[0] if paths else ''
-        save_config(_cfg)
+        live = load_config()
+        live['last_source'] = paths[0] if paths else ''
+        save_config(live)
     except Exception as e:
         task['status'] = 'error'
         task['error'] = str(e)
@@ -424,34 +425,36 @@ async def health():
         'version': '2.1.1',
         'archives': len(_store.list_archives()),
         'emails': stats.get('total', 0),
-        'auth_required': bool(_cfg.get('api_key')),
-        'port': _cfg.get('port', 8732),
+        'auth_required': bool(load_config().get('api_key')),
+        'port': load_config().get('port', 8732),
     }
 
 
 @app.get('/api/agent-key')
 async def get_agent_key():
     """获取（不存在则生成）Agent 接入 API Key"""
-    if not _cfg.get('api_key'):
+    cfg = load_config()
+    if not cfg.get('api_key'):
         import secrets
-        _cfg['api_key'] = secrets.token_hex(16)
-        save_config(_cfg)
+        cfg['api_key'] = secrets.token_hex(16)
+        save_config(cfg)
     return {
-        'api_key': _cfg['api_key'],
-        'port': _cfg.get('port', 8732),
+        'api_key': cfg['api_key'],
+        'port': cfg.get('port', 8732),
         'auth_required': True,
         'archives': len(_store.list_archives()),
         'emails': _store.stats().get('total', 0),
-        'skill_url': f'http://127.0.0.1:{_cfg.get("port", 8732)}/skill/download',
+        'skill_url': f'http://127.0.0.1:{cfg.get("port", 8732)}/skill/download',
     }
 
 
 @app.post('/api/agent-key/regenerate')
 async def regenerate_agent_key():
     import secrets
-    _cfg['api_key'] = secrets.token_hex(16)
-    save_config(_cfg)
-    return {'api_key': _cfg['api_key']}
+    cfg = load_config()
+    cfg['api_key'] = secrets.token_hex(16)
+    save_config(cfg)
+    return {'api_key': cfg['api_key']}
 
 
 @app.get('/skill/SKILL.md')
@@ -515,7 +518,11 @@ async def browse_dir():
 
 @app.post('/api/migrate')
 async def migrate(body: dict = Body(...)):
-    """迁移存储位置。data_dir：复制数据库，重启生效；export_dir：后台复制文件后切换"""
+    """迁移存储位置。
+
+    data_dir: 在线复制数据库并即时切换（无需重启）。
+    export_dir: 旧目录存在且有文件→后台复制后切换；旧目录不存在/为空→直接切换。
+    """
     cfg = load_config()
     result = {}
 
@@ -524,6 +531,7 @@ async def migrate(body: dict = Body(...)):
         target = Path(new_data)
         target.mkdir(parents=True, exist_ok=True)
         src_db = get_db_path(cfg)
+        old_db = get_db_path(cfg)  # 旧库路径（必须在改配置前捕获）
         dst_db = target / 'foxmail2md.db'
         import sqlite3
         src = sqlite3.connect(str(src_db))
@@ -533,9 +541,26 @@ async def migrate(body: dict = Body(...)):
         src.close()
         dst.close()
         cfg['data_dir'] = str(target)
-        result['data_dir'] = {'target': str(target), 'status': 'copied',
-                              'note': '重启 Fox Converter 后生效'}
         save_config(cfg)
+        # 即时切换到新库（无需重启）；确认可用后清理旧库文件释放空间
+        global _store
+        new_store = Store(dst_db)
+        try:
+            new_store.stats('')
+        except Exception:
+            new_store = None
+        if new_store is not None:
+            _store = new_store
+            for suffix in ('', '-shm', '-wal'):
+                try:
+                    os.remove(str(old_db) + suffix)
+                except OSError:
+                    pass
+            result['data_dir'] = {'target': str(target), 'status': 'switched',
+                                  'note': '已即时生效，无需重启'}
+        else:
+            result['data_dir'] = {'target': str(target), 'status': 'copied',
+                                  'note': '已复制，重启后生效'}
 
     new_export = (body.get('export_dir') or '').strip()
     if new_export:
@@ -543,16 +568,24 @@ async def migrate(body: dict = Body(...)):
         if target.exists() and any(target.iterdir()):
             raise HTTPException(400, '目标导出目录非空，请选择空文件夹')
         old_root = get_export_dir(cfg)
-        if not old_root.exists():
-            raise HTTPException(400, '当前导出目录不存在，无需迁移')
-        task_id = str(uuid.uuid4())[:8]
-        _tasks[task_id] = {'status': 'running', 'kind': 'migrate-export',
-                           'old_root': str(old_root), 'new_root': str(target),
-                           'copied': 0}
-        threading.Thread(target=_migrate_export_worker,
-                         args=(task_id, old_root, target), daemon=True).start()
-        result['export_dir'] = {'task_id': task_id, 'status': 'running',
-                                'note': '后台复制中，完成后自动切换'}
+        has_content = old_root.exists() and any(old_root.iterdir())
+        if has_content:
+            # 旧目录有数据：后台复制后切换
+            task_id = str(uuid.uuid4())[:8]
+            _tasks[task_id] = {'status': 'running', 'kind': 'migrate-export',
+                               'old_root': str(old_root), 'new_root': str(target),
+                               'copied': 0}
+            threading.Thread(target=_migrate_export_worker,
+                             args=(task_id, old_root, target), daemon=True).start()
+            result['export_dir'] = {'task_id': task_id, 'status': 'running',
+                                    'note': '后台复制中，完成后自动切换'}
+        else:
+            # 旧目录不存在或为空：直接切换（常见于首次配置/清理后）
+            target.mkdir(parents=True, exist_ok=True)
+            cfg['export_dir'] = str(target)
+            save_config(cfg)
+            result['export_dir'] = {'target': str(target), 'status': 'switched',
+                                    'note': '已即时生效'}
     return result
 
 
@@ -597,10 +630,10 @@ async def get_settings():
 
 @app.put('/api/settings')
 async def update_settings(body: dict = Body(...)):
-    global _cfg
-    _cfg = {**_cfg, **body}
-    save_config(_cfg)
-    return _cfg
+    live = load_config()
+    live.update(body)
+    save_config(live)
+    return live
 
 
 # ── 静态前端（禁缓存：本地应用，避免浏览器拿着旧 JS/CSS 出现样式与逻辑错乱） ──

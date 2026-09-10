@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fox Converter — 邮件存档转换阅读器</title>
-  <link rel="stylesheet" href="styles.css?v=20260910b">
+  <link rel="stylesheet" href="styles.css?v=20260910c">
 </head>
 <body>
 <div id="app" class="app">
@@ -181,7 +181,7 @@
       </div>
     </div>
     <button class="btn btn-primary" id="migrateBtn" style="width:100%;justify-content:center">迁移到新位置</button>
-    <p class="setting-note" id="migrateNote">数据库迁移完成后需重启软件生效；导出目录迁移在后台复制完成后自动切换并删除旧目录。</p>
+    <p class="setting-note" id="migrateNote">两个位置修改后点「迁移到新位置」：数据库在线复制并即时生效（旧库自动清理）；导出目录后台复制（带进度），完成后自动切换并删除旧目录。此后所有导入的转换文件均存到导出目录。</p>
     <div class="progress-bar" id="migrateProgressBar" style="display:none">
       <div class="progress-fill" id="migrateProgressFill"></div>
     </div>
@@ -229,6 +229,6 @@
   <button class="btn btn-primary" id="reconnectBtn">重新连接</button>
 </div>
 
-<script src="app.js?v=20260910b"></script>
+<script src="app.js?v=20260910c"></script>
 </body>
 </html>

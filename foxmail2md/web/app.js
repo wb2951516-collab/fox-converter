@@ -566,9 +566,10 @@ async function pickPaths(paths) {
   if (disk) {
     line.style.display = 'block';
     const ok = disk.free >= disk.need;
-    line.innerHTML = `导出约需 ${fmtSize(disk.need)} · 当前可用 ${fmtSize(disk.free)}` +
+    line.innerHTML = `导出位置 <span title="${esc(disk.export_root)}">${esc(disk.export_root)}</span>` +
+      ` · 约需 ${fmtSize(disk.need)} · 该位置可用 ${fmtSize(disk.free)}` +
       (ok ? ' <span style="color:var(--success)">✓</span>'
-          : ' <span style="color:var(--danger)">空间不足，请先清理或更换导出目录</span>');
+          : ' <span style="color:var(--danger)">空间不足，请到设置页更换导出目录</span>');
     $('#startParseBtn').disabled = !ok;
   } else {
     line.style.display = 'none';
@@ -811,11 +812,18 @@ async function migrateStorage() {  const dataDir = $('#settingDataDir').value.tr
   $('#migrateBtn').disabled = true;
   try {
     const r = await api('/api/migrate', { method: 'POST', body: JSON.stringify(body) });
+    let needWait = false;
     if (r.data_dir) {
-      $('#migrateNote').textContent = '数据库已复制到新位置，重启 Fox Converter 后生效。';
-      toast('数据库迁移完成，请重启软件');
+      if (r.data_dir.status === 'switched') {
+        toast('存档数据库已切换到新位置，立即生效');
+        $('#migrateNote').textContent = '数据库已迁移并即时生效。';
+      } else {
+        $('#migrateNote').textContent = '数据库已复制，重启软件后生效。';
+        needWait = true;
+      }
     }
     if (r.export_dir && r.export_dir.task_id) {
+      needWait = true;
       bar.style.display = 'block';
       const tid = r.export_dir.task_id;
       const timer = setInterval(async () => {
@@ -826,7 +834,7 @@ async function migrateStorage() {  const dataDir = $('#settingDataDir').value.tr
           clearInterval(timer);
           bar.style.display = 'none';
           $('#migrateBtn').disabled = false;
-          toast(`导出目录已迁移（${s.total} 个文件）`);
+          toast(`导出目录已迁移（${s.total} 个文件），立即生效`);
           loadSettings();
         } else if (s.status === 'error') {
           clearInterval(timer);
@@ -835,9 +843,11 @@ async function migrateStorage() {  const dataDir = $('#settingDataDir').value.tr
           toast(`迁移失败：${s.error}`);
         }
       }, 800);
-    } else if (!r.data_dir) {
-      $('#migrateBtn').disabled = false;
+    } else if (!r.export_dir && r.export_dir?.status === 'switched') {
+      toast('导出目录已切换，立即生效');
     }
+    if (!needWait) $('#migrateBtn').disabled = false;
+    loadSettings();
   } catch (e) {
     toast(`迁移失败：${e.message}`);
     $('#migrateBtn').disabled = false;
