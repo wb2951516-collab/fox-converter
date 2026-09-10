@@ -259,6 +259,10 @@ async def start_parse(body: dict = Body(...)):
     if bad:
         raise HTTPException(400, f'存在非 .fox 存档文件：{Path(bad[0]).name}')
 
+    # 强制路径：用户未显式设置导出目录时拒绝导入（防止静默写入系统默认盘）
+    if not load_config().get('export_dir'):
+        raise HTTPException(400, '导出目录尚未设置：请先到「设置 → 存储位置」配置导出目录')
+
     # 磁盘空间检查：导出内容约与源文件相当，剩余不足 1.15 倍时拒绝
     # 注意：先重建导出根目录（可能被用户清理删除），disk_usage 才不会抛路径不存在
     export_root = get_export_dir(load_config())
@@ -422,7 +426,7 @@ async def health():
     stats = _store.stats()
     return {
         'app': 'Fox Converter',
-        'version': '2.1.1',
+        'version': '2.1.2',
         'archives': len(_store.list_archives()),
         'emails': stats.get('total', 0),
         'auth_required': bool(load_config().get('api_key')),
@@ -505,6 +509,9 @@ async def get_paths():
         'data_size': db_file.stat().st_size if db_file.exists() else 0,
         'export_dir': str(export_dir),
         'export_size': _dir_size(export_dir) if export_dir.exists() else 0,
+        # 导出目录是否已由用户显式设置（未设置时不允许导入，防止误写系统默认盘）
+        'export_configured': bool(cfg.get('export_dir')),
+        'data_configured': bool(cfg.get('data_dir')),
     }
 
 
@@ -551,11 +558,18 @@ async def migrate(body: dict = Body(...)):
             new_store = None
         if new_store is not None:
             _store = new_store
+            # 清理旧库文件释放空间；可能被杀软实时扫描短暂锁定，重试数秒
+            import gc
             for suffix in ('', '-shm', '-wal'):
-                try:
-                    os.remove(str(old_db) + suffix)
-                except OSError:
-                    pass
+                for _ in range(8):
+                    try:
+                        os.remove(str(old_db) + suffix)
+                        break
+                    except PermissionError:
+                        gc.collect()
+                        time.sleep(0.5)
+                    except OSError:
+                        break
             result['data_dir'] = {'target': str(target), 'status': 'switched',
                                   'note': '已即时生效，无需重启'}
         else:

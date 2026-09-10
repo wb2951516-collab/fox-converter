@@ -20,6 +20,7 @@ const state = {
   currentView: 'html',
   expandedGroups: new Set(),
   confirmDeleteId: null,
+  exportConfigured: null,   // null=未知
 };
 
 /* ── 工具 ─────────────────────────────────────────────── */
@@ -513,6 +514,14 @@ function openBrowse() {
   $('#parseModal').style.display = 'flex';
 }
 
+async function refreshExportConfigured() {
+  try {
+    const p = await api('/api/paths');
+    state.exportConfigured = !!p.export_configured;
+  } catch {}
+  return state.exportConfigured;
+}
+
 async function pickPaths(paths) {
   const newOnes = paths.filter((p) => p && !pickedPaths.some((v) => v.path === p));
   if (!newOnes.length) return;
@@ -728,6 +737,15 @@ function bindEvents() {
     if (r.path) $('#settingDir').value = r.path;
   });
   $('#migrateBtn').addEventListener('click', migrateStorage);
+  $('#gotoSetupBtn').addEventListener('click', () => {
+    $('#parseModal').style.display = 'none';
+    $$('.nav-item[data-route]').forEach((b) => b.classList.remove('active'));
+    const settingsBtn = document.querySelector('.nav-item[data-route="settings"]');
+    settingsBtn?.classList.add('active');
+    $('#agentPanel').style.display = 'none';
+    $('#settingsPanel').style.display = 'flex';
+    loadSettings();
+  });
 
   const doSearch = debounce(() => {
     state.search = $('#searchInput').value.trim();
@@ -786,6 +804,11 @@ async function loadSettings() {
     $('#settingDir').value = p.export_dir;
     $('#dataSizeLabel').textContent = `（${fmtSize(p.data_size)}）`;
     $('#exportSizeLabel').textContent = `（${fmtSize(p.export_size)}）`;
+    state.exportConfigured = !!p.export_configured;
+    // 未配置导出目录时给出显性提示（首次使用引导）
+    $('#migrateNote').textContent = p.export_configured
+      ? '两个位置修改后点「迁移到新位置」：数据库在线复制并即时生效（旧库自动清理）；导出目录后台复制（带进度），完成后自动切换并删除旧目录。此后所有导入的转换文件均存到导出目录。'
+      : '尚未设置导出目录——设置并迁移完成后才能开始导入。';
   } catch {}
 }
 
@@ -812,6 +835,7 @@ async function migrateStorage() {  const dataDir = $('#settingDataDir').value.tr
   $('#migrateBtn').disabled = true;
   try {
     const r = await api('/api/migrate', { method: 'POST', body: JSON.stringify(body) });
+    await refreshExportConfigured();
     let needWait = false;
     if (r.data_dir) {
       if (r.data_dir.status === 'switched') {
@@ -899,6 +923,15 @@ async function init() {
   } catch (e) {
     console.error('初始化加载失败', e);
     toast(`加载失败：${e.message}`);
+  }
+  // 首次使用引导：导出目录未设置 → 自动打开设置页
+  if ((await refreshExportConfigured()) === false) {
+    $$('.nav-item[data-route]').forEach((b) => b.classList.remove('active'));
+    document.querySelector('.nav-item[data-route="settings"]')?.classList.add('active');
+    $('#agentPanel').style.display = 'none';
+    $('#settingsPanel').style.display = 'flex';
+    await loadSettings();
+    toast('首次使用：请先设置存储位置，再导入存档');
   }
 }
 

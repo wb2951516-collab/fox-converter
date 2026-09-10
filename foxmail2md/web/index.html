@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fox Converter — 邮件存档转换阅读器</title>
-  <link rel="stylesheet" href="styles.css?v=20260910c">
+  <link rel="stylesheet" href="styles.css?v=20260910d">
 </head>
 <body>
 <div id="app" class="app">
@@ -104,6 +104,10 @@
     </div>
     <div class="modal-body" id="parseModalBody">
       <div class="parse-step" id="parseStepSelect">
+        <div class="setup-notice" id="setupNotice" style="display:none">
+          首次使用请先在「设置 → 存储位置」设置导出目录（不设置将无法导入，避免占用系统默认盘）。
+          <button class="btn btn-sm" id="gotoSetupBtn">去设置</button>
+        </div>
         <p class="parse-hint">选择 Foxmail 存档文件（.fox），支持多选与整个文件夹</p>
         <div class="browse-row">
           <button class="btn btn-primary" id="browseBtn">
@@ -229,6 +233,6 @@
   <button class="btn btn-primary" id="reconnectBtn">重新连接</button>
 </div>
 
-<script src="app.js?v=20260910c"></script>
+<script src="app.js?v=20260910d"></script>
 </body>
 </html>
