@@ -260,12 +260,13 @@ async def start_parse(body: dict = Body(...)):
         raise HTTPException(400, f'存在非 .fox 存档文件：{Path(bad[0]).name}')
 
     # 强制路径：用户未显式设置导出目录时拒绝导入（防止静默写入系统默认盘）
-    if not load_config().get('export_dir'):
+    cfg = load_config()
+    if not (cfg.get('export_dir') or os.environ.get('FOX2MD_EXPORT_DIR')):
         raise HTTPException(400, '导出目录尚未设置：请先到「设置 → 存储位置」配置导出目录')
 
     # 磁盘空间检查：导出内容约与源文件相当，剩余不足 1.15 倍时拒绝
     # 注意：先重建导出根目录（可能被用户清理删除），disk_usage 才不会抛路径不存在
-    export_root = get_export_dir(load_config())
+    export_root = get_export_dir(cfg)
     export_root.mkdir(parents=True, exist_ok=True)
     need = sum(os.path.getsize(p) for p in paths) * 1.15
     free = shutil.disk_usage(str(export_root)).free
@@ -362,6 +363,105 @@ async def list_sources():
     return {'sources': _store.list_sources()}
 
 
+# ── 查找清理：按条件筛选已转换邮件并删除 ──────────────────────────────────────
+def _mail_export_files(mail: dict, export_dirs):
+    """收集一封邮件在磁盘上的全部导出文件（md/纯文本/附件），返回存在的路径列表"""
+    files = []
+    md_rel = mail.get('md_file') or ''
+    if md_rel:
+        files.append(md_rel)
+        txt_rel = 'plaintext/' + Path(md_rel).name[:-3] + '.txt'
+        files.append(txt_rel)
+    files.extend(mail.get('attachment_files') or [])
+    out = []
+    for rel in files:
+        for ed in export_dirs:
+            p = Path(ed) / rel
+            if p.exists():
+                out.append(p)
+                break
+    return out
+
+
+def _mail_export_size(mail: dict, export_dirs):
+    return sum(f.stat().st_size for f in _mail_export_files(mail, export_dirs))
+
+
+@app.post('/api/mail-cleanup/find')
+async def mail_cleanup_find(body: dict = Body(...)):
+    """按条件筛选已转换邮件（条件 AND），附每封的磁盘占用"""
+    cfg = load_config()
+    export_dirs = [a['export_dir'] for a in _store.list_archives() if a.get('export_dir')]
+    rows = _store.find_mails(
+        archive_id=body.get('archive_id') or 0,
+        sender=(body.get('sender') or '').strip(),
+        subject=(body.get('subject') or '').strip(),
+        date_from=(body.get('date_from') or '').strip(),
+        date_to=(body.get('date_to') or '').strip(),
+        min_mb=body.get('min_mb'),
+        max_mb=body.get('max_mb'),
+        limit=min(int(body.get('limit', 500)), 2000),
+    )
+    items = []
+    total_bytes = 0
+    for m in rows:
+        size = _mail_export_size(m, export_dirs)
+        total_bytes += size
+        items.append({
+            'id': m['id'], 'subject': m['subject'], 'from': m['from'],
+            'date': m['date'], 'raw_size': m['raw_size'],
+            'attachment_count': m['attachment_count'],
+            'export_size': size,
+        })
+    return {'total': len(items), 'items': items, 'total_export_bytes': total_bytes}
+
+
+@app.post('/api/mail-cleanup/delete')
+async def mail_cleanup_delete(body: dict = Body(...)):
+    """删除选中的已转换邮件。
+
+    mode=index: 仅移出索引（磁盘文件保留）
+    mode=full : 连同导出文件（MD/纯文本/附件）一起删除
+    """
+    ids = [int(i) for i in (body.get('ids') or [])]
+    mode = body.get('mode', 'full')
+    if not ids:
+        raise HTTPException(400, '未选择邮件')
+    if mode not in ('index', 'full'):
+        raise HTTPException(400, 'mode 仅支持 index / full')
+    mails = _store.get_mails_by_ids(ids)
+    if not mails:
+        raise HTTPException(404, '所选邮件不存在（可能已被删除）')
+
+    freed = 0
+    if mode == 'full':
+        cfg = load_config()
+        export_dirs = [a['export_dir'] for a in _store.list_archives() if a.get('export_dir')]
+        for m in mails:
+            for f in _mail_export_files(m, export_dirs):
+                try:
+                    freed += f.stat().st_size
+                    f.unlink()
+                except OSError:
+                    pass
+            # 清理可能因此变空的附件目录
+            if m.get('attachment_files'):
+                att_dir = Path(export_dirs[0] if export_dirs else '') \
+                    / Path(m['attachment_files'][0]).parent
+                try:
+                    if att_dir.exists() and not any(att_dir.iterdir()):
+                        att_dir.rmdir()
+                except OSError:
+                    pass
+    deleted = _store.delete_mails([m['id'] for m in mails])
+    return {'deleted': deleted, 'mode': mode, 'freed_bytes': freed}
+
+
+@app.get('/api/sources')
+async def list_sources():
+    return {'sources': _store.list_sources()}
+
+
 @app.get('/api/stats')
 async def stats(source: str = Query(''), archive_id: int = Query(0)):
     if not archive_id and not source:
@@ -426,7 +526,7 @@ async def health():
     stats = _store.stats()
     return {
         'app': 'Fox Converter',
-        'version': '2.1.2',
+        'version': '2.2.0',
         'archives': len(_store.list_archives()),
         'emails': stats.get('total', 0),
         'auth_required': bool(load_config().get('api_key')),

@@ -19,8 +19,23 @@ def _resource_path(rel: str) -> str:
     return os.path.join(base, rel)
 
 
+def _centered_window_args():
+    """计算让浏览器应用窗口落在屏幕正中的参数"""
+    import ctypes
+    try:
+        user32 = ctypes.windll.user32
+        user32.SetProcessDPIAware()
+        sw, sh = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+    except Exception:
+        sw, sh = 1920, 1080
+    ww, wh = 1280, 860
+    x = max(0, (sw - ww) // 2)
+    y = max(0, (sh - wh) // 2)
+    return [f'--window-position={x},{y}', f'--window-size={ww},{wh}']
+
+
 def _open_in_browser(url: str, browser: str):
-    """按设置打开浏览器；chrome/edge 用 app 模式（无地址栏的独立窗口）"""
+    """按设置打开浏览器；chrome/edge 用 app 模式（无地址栏的独立窗口，居中显示）"""
     candidates = []
     if browser == 'chrome':
         candidates = [
@@ -36,7 +51,7 @@ def _open_in_browser(url: str, browser: str):
     for p in candidates:
         if os.path.exists(p):
             # 列表参数直接启动，不经 shell，避免任何拼接注入
-            subprocess.Popen([p, f'--app={url}'], close_fds=True)
+            subprocess.Popen([p, f'--app={url}'] + _centered_window_args(), close_fds=True)
             return
     webbrowser.open(url)
 

@@ -142,6 +142,61 @@ class Store:
             r = c.execute('SELECT * FROM archives WHERE id = ?', (archive_id,)).fetchone()
         return dict(r) if r else None
 
+    def get_mails_by_ids(self, ids):
+        """按 id 列表取邮件（保序，供批量删除/统计）"""
+        if not ids:
+            return []
+        marks = ','.join('?' * len(ids))
+        with self._conn() as c:
+            rows = c.execute(
+                f'SELECT * FROM emails WHERE id IN ({marks})', list(ids)
+            ).fetchall()
+        by_id = {r['id']: dict(r) for r in rows}
+        return [by_id[i] for i in ids if i in by_id]
+
+    def delete_mails(self, ids):
+        """按 id 列表删除邮件记录"""
+        if not ids:
+            return 0
+        marks = ','.join('?' * len(ids))
+        with self._conn() as c:
+            cur = c.execute(f'DELETE FROM emails WHERE id IN ({marks})', list(ids))
+            return cur.rowcount
+
+    def find_mails(self, archive_id=0, sender='', subject='',
+                   date_from='', date_to='', min_mb=None, max_mb=None, limit=500):
+        """按条件筛选邮件（条件之间 AND；大小按源邮件体积，单位 MB）"""
+        conds, args = [], []
+        if archive_id:
+            conds.append('archive_id = ?')
+            args.append(archive_id)
+        if sender:
+            conds.append('from_addr LIKE ?')
+            args.append(f'%{sender}%')
+        if subject:
+            conds.append('subject LIKE ?')
+            args.append(f'%{subject}%')
+        if date_from:
+            conds.append('date_iso >= ?')
+            args.append(date_from)
+        if date_to:
+            conds.append('date_iso <= ?')
+            args.append(date_to + 'T23:59:59' if len(date_to) == 10 else date_to)
+        if min_mb is not None:
+            conds.append('raw_size >= ?')
+            args.append(int(min_mb * 1024 * 1024))
+        if max_mb is not None:
+            conds.append('raw_size <= ?')
+            args.append(int(max_mb * 1024 * 1024))
+        where = ' AND '.join(conds) if conds else '1=1'
+        with self._conn() as c:
+            rows = c.execute(
+                f'SELECT * FROM emails WHERE {where} '
+                'ORDER BY date_iso DESC LIMIT ?',
+                (*args, limit),
+            ).fetchall()
+        return [self._row_to_detail(r) for r in rows]
+
     def get_archive_by_path(self, source_path):
         with self._conn() as c:
             r = c.execute('SELECT * FROM archives WHERE source_path = ?',

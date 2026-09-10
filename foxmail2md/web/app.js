@@ -678,17 +678,23 @@ function listenProgress(taskId) {
 /* ── 事件绑定 ─────────────────────────────────────────── */
 function bindEvents() {
   $$('.nav-item[data-route]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       $$('.nav-item[data-route]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       $('#settingsPanel').style.display = 'none';
       $('#agentPanel').style.display = 'none';
+      $('#cleanupPanel').style.display = 'none';
+      $('#guidePanel').style.display = 'none';
       if (btn.dataset.route === 'settings') {
         $('#settingsPanel').style.display = 'flex';
         loadSettings();
       } else if (btn.dataset.route === 'agent') {
         $('#agentPanel').style.display = 'flex';
         loadAgentKey();
+      } else if (btn.dataset.route === 'cleanup') {
+        $('#cleanupPanel').style.display = 'flex';
+      } else if (btn.dataset.route === 'guide') {
+        $('#guidePanel').style.display = 'flex';
       }
     });
   });
@@ -708,6 +714,22 @@ function bindEvents() {
     $('#agentPanel').style.display = 'none';
     $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
   });
+  $('#cleanupCloseBtn').addEventListener('click', () => {
+    $('#cleanupPanel').style.display = 'none';
+    $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
+  });
+  $('#guideCloseBtn').addEventListener('click', () => {
+    $('#guidePanel').style.display = 'none';
+    $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
+  });
+
+  // 查找清理
+  $('#cleanupFindBtn').addEventListener('click', findCleanup);
+  $('#cleanupResetBtn').addEventListener('click', () => {
+    ['cfSender', 'cfSubject', 'cfDateFrom', 'cfDateTo', 'cfMinMb', 'cfMaxMb'].forEach(
+      (id) => { $('#' + id).value = ''; });
+  });
+  $('#cleanupDelBtn').addEventListener('click', deleteCleanup);
   $('#copyPromptBtn').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText($('#agentPrompt').textContent);
@@ -875,6 +897,102 @@ async function migrateStorage() {  const dataDir = $('#settingDataDir').value.tr
   } catch (e) {
     toast(`迁移失败：${e.message}`);
     $('#migrateBtn').disabled = false;
+  }
+}
+
+/* ── 查找清理 ─────────────────────────────────────────── */
+let cleanupItems = [];
+let cleanupSel = new Set();
+
+async function findCleanup() {
+  const body = {
+    sender: $('#cfSender').value.trim(),
+    subject: $('#cfSubject').value.trim(),
+    date_from: $('#cfDateFrom').value,
+    date_to: $('#cfDateTo').value,
+    min_mb: $('#cfMinMb').value ? parseFloat($('#cfMinMb').value) : null,
+    max_mb: $('#cfMaxMb').value ? parseFloat($('#cfMaxMb').value) : null,
+  };
+  if (!body.sender && !body.subject && !body.date_from && !body.date_to
+      && body.min_mb == null && body.max_mb == null) {
+    toast('至少填一个条件再查找'); return;
+  }
+  const btn = $('#cleanupFindBtn');
+  btn.disabled = true;
+  btn.textContent = '查找中…';
+  $('#cleanupSummary').style.display = 'none';
+  $('#cleanupResults').style.display = 'none';
+  $('#cleanupActions').style.display = 'none';
+  try {
+    const r = await api('/api/mail-cleanup/find', { method: 'POST', body: JSON.stringify(body) });
+    cleanupItems = r.items;
+    cleanupSel = new Set();
+    $('#cleanupSummary').style.display = 'block';
+    $('#cleanupSummary').innerHTML = r.total
+      ? `找到 <strong class="num">${r.total}</strong> 封 · 转换文件共占 ${fmtSize(r.total_export_bytes)}`
+      : '没有符合条件的邮件';
+    renderCleanupResults(r.total);
+  } catch (e) {
+    toast(`查找失败：${e.message}`);
+  }
+  btn.disabled = false;
+  btn.textContent = '查 找';
+}
+
+function renderCleanupResults(totalFound) {
+  const box = $('#cleanupResults');
+  $('#cleanupResults').style.display = 'block';
+  $('#cleanupActions').style.display = totalFound ? 'block' : 'none';
+  $('#cleanupDelBtn').disabled = true;
+  if (!totalFound) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <label class="cleanup-selectall"><input type="checkbox" id="cleanupAll"> 全选</label>
+    ${cleanupItems.map((m) => `
+      <label class="cleanup-row">
+        <input type="checkbox" data-id="${m.id}">
+        <span class="cr-main">
+          <span class="cr-subject" title="${esc(m.subject)}">${esc(m.subject)}</span>
+          <span class="cr-meta">${esc(m.from)} · ${fmtDate(m.date)}</span>
+        </span>
+        <span class="cr-size num">${fmtSize(m.export_size)}</span>
+      </label>`).join('')}`;
+  const refresh = () => {
+    cleanupSel = new Set(
+      [...box.querySelectorAll('input[data-id]:checked')].map((c) => +c.dataset.id));
+    $('#cleanupDelBtn').disabled = !cleanupSel.size;
+    $('#cleanupDelBtn').textContent = cleanupSel.size
+      ? `删除选中（${cleanupSel.size} 封）` : '删除选中';
+  };
+  box.querySelectorAll('input[data-id]').forEach((c) => c.addEventListener('change', refresh));
+  $('#cleanupAll').addEventListener('change', (e) => {
+    box.querySelectorAll('input[data-id]').forEach((c) => { c.checked = e.target.checked; });
+    refresh();
+  });
+  refresh();
+}
+
+async function deleteCleanup() {
+  const ids = [...cleanupSel];
+  if (!ids.length) return;
+  const mode = document.querySelector('input[name="delMode"]:checked')?.value || 'full';
+  const modeText = mode === 'full'
+    ? `彻底删除 ${ids.length} 封（含 MD/纯文本/附件文件，不可恢复）`
+    : `仅把 ${ids.length} 封从列表移出（文件保留）`;
+  if (!confirm(`确认${modeText}？`)) return;
+  try {
+    const r = await api('/api/mail-cleanup/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids, mode }),
+    });
+    toast(mode === 'full'
+      ? `已删除 ${r.deleted} 封，释放 ${fmtSize(r.freed_bytes)}`
+      : `已移出 ${r.deleted} 封`);
+    cleanupSel = new Set();
+    findCleanup();
+    loadArchives();
+    loadMails();
+  } catch (e) {
+    toast(`删除失败：${e.message}`);
   }
 }
 

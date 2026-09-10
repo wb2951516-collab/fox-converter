@@ -26,6 +26,14 @@
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>
         <span>Agent 接入</span>
       </button>
+      <button class="nav-item" data-route="cleanup" aria-label="查找清理">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M8 11h6M11 8v6"/></svg>
+        <span>查找清理</span>
+      </button>
+      <button class="nav-item" data-route="guide" aria-label="使用说明">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+        <span>使用说明</span>
+      </button>
       <button class="nav-item" data-route="settings" aria-label="设置">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m11-11h-6m-10 0H1m17.66-7.07l-4.24 4.24M7.58 16.42l-4.24 4.24m0-16.97l4.24 4.24m8.48 8.48l4.24 4.24"/></svg>
         <span>设置</span>
@@ -219,6 +227,84 @@
       <button class="btn" id="regenKeyBtn" style="width:100%;justify-content:center">重新获取</button>
     </div>
     <p class="setting-note">提示词中的下载地址指向本机服务，智能体需与 Fox Converter 在同一台电脑；跨机访问请用本机局域网 IP 并开放防火墙。已兼容 openclaw 系（WinClaw）与 Claude/AgentSkills 规范。</p>
+  </div>
+</div>
+
+<!-- ═══ 查找清理面板 ═══ -->
+<div class="settings-panel panel-wide" id="cleanupPanel" style="display:none">
+  <div class="settings-header">
+    <h2>查找清理</h2>
+    <button class="icon-btn" id="cleanupCloseBtn" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="cleanup-body">
+    <p class="cleanup-intro">按条件找出已转换的邮件，勾选后删除。两种删法：只把邮件从列表里移出（磁盘文件保留），或连文件一起删（释放空间）。删之前会让再确认一次。</p>
+    <div class="cond-grid">
+      <div class="cond-item"><label>发件人</label><input type="text" id="cfSender" placeholder="邮箱或名称包含…" spellcheck="false"></div>
+      <div class="cond-item"><label>主题</label><input type="text" id="cfSubject" placeholder="主题包含…" spellcheck="false"></div>
+      <div class="cond-item cond-pair">
+        <label>日期从</label>
+        <input type="date" id="cfDateFrom">
+        <span class="cond-sep">到</span>
+        <input type="date" id="cfDateTo">
+      </div>
+      <div class="cond-item cond-pair">
+        <label>大小（MB）</label>
+        <input type="number" id="cfMinMb" placeholder="最小" min="0">
+        <span class="cond-sep">至</span>
+        <input type="number" id="cfMaxMb" placeholder="最大" min="0">
+      </div>
+    </div>
+    <div class="cond-actions">
+      <button class="btn btn-primary" id="cleanupFindBtn">查 找</button>
+      <button class="btn" id="cleanupResetBtn">清空条件</button>
+    </div>
+    <div class="cleanup-summary num" id="cleanupSummary" style="display:none"></div>
+    <div class="cleanup-results" id="cleanupResults" style="display:none"></div>
+    <div class="cleanup-actions" id="cleanupActions" style="display:none">
+      <div class="mode-row">
+        <label><input type="radio" name="delMode" value="full" checked> 彻底删除（连 MD/纯文本/附件一起）</label>
+        <label><input type="radio" name="delMode" value="index"> 仅移出列表（文件保留）</label>
+      </div>
+      <button class="btn btn-danger" id="cleanupDelBtn" disabled>删除选中</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 操作指南面板 ═══ -->
+<div class="settings-panel" id="guidePanel" style="display:none">
+  <div class="settings-header">
+    <h2>使用说明</h2>
+    <button class="icon-btn" id="guideCloseBtn" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="settings-body guide-body">
+    <section>
+      <h3>导入存档</h3>
+      <p>点左下角「导入 .fox 文件」，选一个或多个 .fox，也可以直接选文件夹。大文件要跑几分钟，进度条会动。第一次用的话，先把设置里的存储位置改到空间够的盘。</p>
+    </section>
+    <section>
+      <h3>看邮件</h3>
+      <p>左侧点一封，右边看正文。正文有三种看法：原文（和 Foxmail 里一样）、Markdown、纯文本，右上角切换，旁边有复制按钮。有附件的邮件会多一个「附件」页，进去能单独下载。</p>
+    </section>
+    <section>
+      <h3>搜索和分组</h3>
+      <p>搜索框输入关键词，主题、发件人、正文都能搜到，中文没问题。「分组」下拉可以把同一件事的来往邮件归到一起（按主题），也能按发件人、收件人分。</p>
+    </section>
+    <section>
+      <h3>清理空间</h3>
+      <p>「查找清理」页按发件人、主题、日期、大小把邮件筛出来，勾选后删除。删法有两种：只从列表移出（文件留着），或者连文件一起删掉腾空间。删之前会再让你确认一次，删掉的内容重导对应的 .fox 就能找回来。</p>
+    </section>
+    <section>
+      <h3>存储位置</h3>
+      <p>设置页里两样东西可以换地方：存档数据（数据库）和导出文件（MD/纯文本/附件）。改成想要的盘，点「迁移到新位置」，文件会自动搬过去，旧位置清空。以后导入的都存到这里，不会再写 C 盘。</p>
+    </section>
+    <section>
+      <h3>Agent 接入</h3>
+      <p>「Agent 接入」页复制两段内容发给智能体（比如 WinClaw 小龙虾）：先发提示词装技能，再发 Key 完成配置。之后直接跟它说"查一下某某的邮件"就行。</p>
+    </section>
   </div>
 </div>
 
