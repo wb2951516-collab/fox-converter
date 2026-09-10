@@ -20,17 +20,32 @@ def _resource_path(rel: str) -> str:
 
 
 def _centered_window_args():
-    """计算让浏览器应用窗口落在屏幕正中的参数"""
+    """计算让浏览器应用窗口落在屏幕工作区正中的参数。
+
+    注意：不调用 SetProcessDPIAware——保持 DPI 虚拟化时 GetSystemMetrics/
+    SystemParametersInfo 返回逻辑像素，与 Chrome --window-position 的坐标系一致。
+    （此前用物理像素计算，在缩放屏上窗口会偏到右下角。）
+    """
     import ctypes
+
+    class RECT(ctypes.Structure):
+        _fields_ = [('left', ctypes.c_long), ('top', ctypes.c_long),
+                    ('right', ctypes.c_long), ('bottom', ctypes.c_long)]
+
     try:
         user32 = ctypes.windll.user32
-        user32.SetProcessDPIAware()
-        sw, sh = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+        rc = RECT()
+        # SPI_GETWORKAREA：任务栏之外的工作区（逻辑像素）
+        if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rc), 0):
+            sw, sh = rc.right - rc.left, rc.bottom - rc.top
+            ox, oy = rc.left, rc.top
+        else:
+            sw, sh, ox, oy = 1920, 1040, 0, 0
     except Exception:
-        sw, sh = 1920, 1080
+        sw, sh, ox, oy = 1920, 1040, 0, 0
     ww, wh = 1280, 860
-    x = max(0, (sw - ww) // 2)
-    y = max(0, (sh - wh) // 2)
+    x = ox + max(0, (sw - ww) // 2)
+    y = oy + max(0, (sh - wh) // 2)
     return [f'--window-position={x},{y}', f'--window-size={ww},{wh}']
 
 

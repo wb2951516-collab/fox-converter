@@ -526,7 +526,7 @@ async def health():
     stats = _store.stats()
     return {
         'app': 'Fox Converter',
-        'version': '2.2.0',
+        'version': '2.2.1',
         'archives': len(_store.list_archives()),
         'emails': stats.get('total', 0),
         'auth_required': bool(load_config().get('api_key')),
