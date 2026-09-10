@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fox Converter — 邮件存档转换阅读器</title>
-  <link rel="stylesheet" href="styles.css?v=20260910d">
+  <title>Fox Converter</title>
+  <link rel="stylesheet" href="styles.css?v=20260911a">
 </head>
 <body>
 <div id="app" class="app">
@@ -18,35 +18,35 @@
       <span class="brand-name">Fox Converter</span>
     </div>
     <nav class="sidebar-nav">
-      <button class="nav-item active" data-route="mails" aria-label="邮件列表">
+      <button class="nav-item active" data-route="mails" aria-label="mails">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M3 8l9 6 9-6M3 8v8a2 2 0 002 2h14a2 2 0 002-2V8M3 8a2 2 0 012-2h14a2 2 0 012 2"/></svg>
-        <span>邮件</span>
+        <span data-i18n="nav.mail">邮件</span>
       </button>
-      <button class="nav-item" data-route="agent" aria-label="Agent 接入">
+      <button class="nav-item" data-route="agent" aria-label="agent">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
-        <span>Agent 接入</span>
+        <span data-i18n="nav.agent">Agent 接入</span>
       </button>
-      <button class="nav-item" data-route="cleanup" aria-label="查找清理">
+      <button class="nav-item" data-route="cleanup" aria-label="cleanup">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
-        <span>查找清理</span>
+        <span data-i18n="nav.cleanup">查找清理</span>
       </button>
-      <button class="nav-item" data-route="guide" aria-label="使用说明">
+      <button class="nav-item" data-route="guide" aria-label="guide">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
-        <span>使用说明</span>
+        <span data-i18n="nav.guide">使用说明</span>
       </button>
-      <button class="nav-item" data-route="settings" aria-label="设置">
+      <button class="nav-item" data-route="settings" aria-label="settings">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-        <span>设置</span>
+        <span data-i18n="nav.settings">设置</span>
       </button>
     </nav>
     <div class="sidebar-archives">
-      <div class="side-title">存档</div>
+      <div class="side-title" data-i18n="side.archives">存档</div>
       <div id="archiveList"></div>
     </div>
     <div class="sidebar-stats" id="sidebarStats"></div>
     <button class="nav-item parse-btn" id="openParseBtn">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5-5 5 5M12 5v12"/></svg>
-      <span>导入 .fox 文件</span>
+      <span data-i18n="side.import">导入 .fox 文件</span>
     </button>
   </aside>
 
@@ -55,25 +55,25 @@
     <div class="list-header">
       <div class="search-box">
         <svg class="icon search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input type="search" id="searchInput" placeholder="搜索邮件…" autocomplete="off" spellcheck="false">
+        <input type="search" id="searchInput" data-i18n-ph="search.ph" placeholder="搜索邮件…" autocomplete="off" spellcheck="false">
       </div>
       <div class="sort-select">
-        <select id="groupSelect" aria-label="分组方式">
-          <option value="">不分组</option>
-          <option value="subject">按主题</option>
-          <option value="from">按发件人</option>
-          <option value="to">按收件人</option>
+        <select id="groupSelect" aria-label="group">
+          <option value="" data-i18n="group.none">不分组</option>
+          <option value="subject" data-i18n="group.subject">按主题</option>
+          <option value="from" data-i18n="group.from">按发件人</option>
+          <option value="to" data-i18n="group.to">按收件人</option>
         </select>
       </div>
       <div class="sort-select" id="sortWrap">
-        <select id="sortSelect" aria-label="排序方式">
-          <option value="date_desc">最新优先</option>
-          <option value="date_asc">最早优先</option>
-          <option value="subject">按主题</option>
+        <select id="sortSelect" aria-label="sort">
+          <option value="date_desc" data-i18n="sort.new">最新优先</option>
+          <option value="date_asc" data-i18n="sort.old">最早优先</option>
+          <option value="subject" data-i18n="sort.subject">按主题</option>
         </select>
       </div>
     </div>
-    <div class="list-items" id="mailList" aria-label="邮件列表"></div>
+    <div class="list-items" id="mailList" aria-label="mail list"></div>
     <div class="list-footer" id="listFooter"></div>
   </section>
 
@@ -81,18 +81,18 @@
   <main class="reader-panel" id="readerPanel">
     <div class="reader-empty" id="readerEmpty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48" style="opacity:.3"><path d="M3 7l9 6 9-6M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4"/></svg>
-      <p>从左侧选择一封邮件</p>
+      <p data-i18n="empty.reader">从左侧选择一封邮件</p>
     </div>
     <div class="reader-active" id="readerActive" style="display:none">
       <div class="reader-toolbar">
         <div class="reader-meta" id="readerMeta"></div>
         <div class="view-tabs" role="tablist">
-          <button class="tab active" data-view="html" role="tab">原文</button>
+          <button class="tab active" data-view="html" role="tab" data-i18n="view.html">原文</button>
           <button class="tab" data-view="md" role="tab">Markdown</button>
-          <button class="tab" data-view="text" role="tab">纯文本</button>
-          <button class="tab att-tab" data-view="atts" role="tab" style="display:none">附件</button>
+          <button class="tab" data-view="text" role="tab" data-i18n="view.text">纯文本</button>
+          <button class="tab att-tab" data-view="atts" role="tab" style="display:none" data-i18n="view.atts">附件</button>
         </div>
-        <button class="icon-btn" id="copyBtn" aria-label="复制正文" title="复制当前视图内容">
+        <button class="icon-btn" id="copyBtn" data-i18n-title="copy" aria-label="copy" title="复制">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
         </button>
       </div>
@@ -103,47 +103,47 @@
 
 <!-- ═══ 解析对话框 ═══ -->
 <div class="modal-backdrop" id="parseModal" style="display:none">
-  <div class="modal" role="dialog" aria-label="导入 .fox 文件">
+  <div class="modal" role="dialog" aria-label="import">
     <div class="modal-header">
-      <h2>导入 Foxmail 存档</h2>
-      <button class="icon-btn" id="parseCloseBtn" aria-label="关闭">
+      <h2 data-i18n="import.title">导入 Foxmail 存档</h2>
+      <button class="icon-btn" id="parseCloseBtn" aria-label="close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="modal-body" id="parseModalBody">
       <div class="parse-step" id="parseStepSelect">
         <div class="setup-notice" id="setupNotice" style="display:none">
-          首次使用请先在「设置 → 存储位置」设置导出目录（不设置将无法导入，避免占用系统默认盘）。
-          <button class="btn btn-sm" id="gotoSetupBtn">去设置</button>
+          <span data-i18n="import.setupNotice">首次使用请先在「设置 → 存储位置」设置导出目录（不设置将无法导入，避免占用系统默认盘）。</span>
+          <button class="btn btn-sm" id="gotoSetupBtn" data-i18n="import.goto">去设置</button>
         </div>
-        <p class="parse-hint">选择 Foxmail 存档文件（.fox），支持多选与整个文件夹</p>
+        <p class="parse-hint" data-i18n="import.hint">选择 Foxmail 存档文件（.fox），支持多选与整个文件夹</p>
         <div class="browse-row">
           <button class="btn btn-primary" id="browseBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 7l9 6 9-6M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4"/></svg>
-            选择文件…
+            <span data-i18n="import.pick">选择文件…</span>
           </button>
-          <button class="btn" id="browseFolderBtn">选择文件夹…</button>
+          <button class="btn" id="browseFolderBtn" data-i18n="import.folder">选择文件夹…</button>
         </div>
         <div class="parse-manual">
-          <input type="text" id="manualPath" placeholder="或粘贴 .fox 完整路径（多个用换行/分号分隔）" spellcheck="false">
-          <button class="btn" id="useManualPathBtn">添加</button>
+          <input type="text" id="manualPath" data-i18n-ph="import.paste.ph" placeholder="或粘贴 .fox 完整路径（多个用换行/分号分隔）" spellcheck="false">
+          <button class="btn" id="useManualPathBtn" data-i18n="import.paste">添加</button>
         </div>
         <div class="parse-file-list" id="parseFileList" style="display:none"></div>
         <div class="disk-line num" id="diskLine" style="display:none"></div>
-        <button class="btn btn-primary" id="startParseBtn" style="display:none">开始导入</button>
+        <button class="btn btn-primary" id="startParseBtn" style="display:none" data-i18n="import.start">开始导入</button>
       </div>
       <div class="parse-step" id="parseStepProgress" style="display:none">
         <div class="progress-file num" id="progressFile"></div>
         <div class="progress-bar">
           <div class="progress-fill" id="progressFill"></div>
         </div>
-        <p class="progress-text" id="progressText">准备中…</p>
+        <p class="progress-text" id="progressText"></p>
         <p class="progress-sub" id="progressSub"></p>
         <div class="done-files num" id="doneFiles"></div>
       </div>
       <div class="parse-step" id="parseStepDone" style="display:none">
         <p class="done-text" id="doneText"></p>
-        <button class="btn btn-primary" id="doneCloseBtn">完成</button>
+        <button class="btn btn-primary" id="doneCloseBtn" data-i18n="import.done">完成</button>
       </div>
     </div>
   </div>
@@ -152,48 +152,55 @@
 <!-- ═══ 设置面板 ═══ -->
 <div class="settings-panel" id="settingsPanel" style="display:none">
   <div class="settings-header">
-    <h2>设置</h2>
-    <button class="icon-btn" id="settingsCloseBtn" aria-label="关闭">
+    <h2 data-i18n="set.title">设置</h2>
+    <button class="icon-btn" id="settingsCloseBtn" aria-label="close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
   </div>
   <div class="settings-body">
     <div class="setting-row">
-      <label for="settingTheme">界面风格</label>
-      <select id="settingTheme">
-        <option value="light">浅色</option>
-        <option value="dark">深色</option>
+      <label for="settingLang" data-i18n="set.lang">语言 / Language</label>
+      <select id="settingLang">
+        <option value="zh-CN">简体中文</option>
+        <option value="en">English</option>
       </select>
     </div>
     <div class="setting-row">
-      <label for="settingAccent">主题色</label>
+      <label for="settingTheme" data-i18n="set.theme">界面风格</label>
+      <select id="settingTheme">
+        <option value="light" data-i18n="set.theme.light">浅色</option>
+        <option value="dark" data-i18n="set.theme.dark">深色</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label for="settingAccent" data-i18n="set.accent">主题色</label>
       <input type="color" id="settingAccent" value="#2563eb">
     </div>
     <div class="setting-row">
-      <label for="settingBrowser">打开方式</label>
+      <label for="settingBrowser" data-i18n="set.browser">打开方式</label>
       <select id="settingBrowser">
-        <option value="default">系统默认浏览器</option>
-        <option value="chrome">Chrome（独立窗口）</option>
-        <option value="edge">Edge（独立窗口）</option>
+        <option value="default" data-i18n="set.browser.default">系统默认浏览器</option>
+        <option value="chrome" data-i18n="set.browser.chrome">Chrome（独立窗口）</option>
+        <option value="edge" data-i18n="set.browser.edge">Edge（独立窗口）</option>
       </select>
     </div>
-    <div class="setting-section-title">存储位置</div>
+    <div class="setting-section-title" data-i18n="set.storage">存储位置</div>
     <div class="setting-row">
-      <label>存档数据（数据库）<span class="num" id="dataSizeLabel"></span></label>
+      <label><span data-i18n="set.data">存档数据（数据库）</span> <span class="num" id="dataSizeLabel"></span></label>
       <div class="path-row">
-        <input type="text" id="settingDataDir" placeholder="默认在 %APPDATA%\foxmail2md" spellcheck="false" readonly>
-        <button class="btn btn-sm" id="browseDataDirBtn">浏览…</button>
+        <input type="text" id="settingDataDir" placeholder="%APPDATA%\foxmail2md" spellcheck="false" readonly>
+        <button class="btn btn-sm" id="browseDataDirBtn" data-i18n="set.browse">浏览…</button>
       </div>
     </div>
     <div class="setting-row">
-      <label>导出目录（MD/纯文本/附件）<span class="num" id="exportSizeLabel"></span></label>
+      <label><span data-i18n="set.export">导出目录（MD/纯文本/附件）</span> <span class="num" id="exportSizeLabel"></span></label>
       <div class="path-row">
-        <input type="text" id="settingDir" placeholder="默认在文档目录下" spellcheck="false" readonly>
-        <button class="btn btn-sm" id="browseExportDirBtn">浏览…</button>
+        <input type="text" id="settingDir" spellcheck="false" readonly>
+        <button class="btn btn-sm" id="browseExportDirBtn" data-i18n="set.browse">浏览…</button>
       </div>
     </div>
-    <button class="btn btn-primary" id="migrateBtn" style="width:100%;justify-content:center">迁移到新位置</button>
-    <p class="setting-note" id="migrateNote">两个位置修改后点「迁移到新位置」：数据库在线复制并即时生效（旧库自动清理）；导出目录后台复制（带进度），完成后自动切换并删除旧目录。此后所有导入的转换文件均存到导出目录。</p>
+    <button class="btn btn-primary" id="migrateBtn" style="width:100%;justify-content:center" data-i18n="set.migrate">迁移到新位置</button>
+    <p class="setting-note" id="migrateNote"></p>
     <div class="progress-bar" id="migrateProgressBar" style="display:none">
       <div class="progress-fill" id="migrateProgressFill"></div>
     </div>
@@ -203,71 +210,71 @@
 <!-- ═══ Agent 接入面板 ═══ -->
 <div class="settings-panel" id="agentPanel" style="display:none">
   <div class="settings-header">
-    <h2>Agent 接入</h2>
-    <button class="icon-btn" id="agentCloseBtn" aria-label="关闭">
+    <h2 data-i18n="nav.agent">Agent 接入</h2>
+    <button class="icon-btn" id="agentCloseBtn" aria-label="close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
   </div>
   <div class="settings-body">
     <div class="agent-stats num" id="agentStats"></div>
     <div class="agent-step">
-      <div class="agent-step-title">第 1 步 · 复制提示词，发给你的智能体以安装技能</div>
+      <div class="agent-step-title" data-i18n="agent.step1">第 1 步 · 复制提示词，发给你的智能体以安装技能</div>
       <div class="agent-prompt" id="agentPrompt"></div>
-      <button class="btn btn-primary" id="copyPromptBtn" style="width:100%;justify-content:center">一键复制提示词</button>
+      <button class="btn btn-primary" id="copyPromptBtn" style="width:100%;justify-content:center" data-i18n="agent.copyPrompt">一键复制提示词</button>
     </div>
     <div class="agent-step">
-      <div class="agent-step-title">第 2 步 · 复制 API Key，发给智能体以完成配置</div>
+      <div class="agent-step-title" data-i18n="agent.step2">第 2 步 · 复制 API Key，发给智能体以完成配置</div>
       <div class="agent-key-row">
         <code class="agent-key num" id="agentKey"></code>
-        <button class="icon-btn" id="copyKeyBtn" aria-label="复制 Key" title="复制 Key">
+        <button class="icon-btn" id="copyKeyBtn" aria-label="copy key" title="Copy key">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
         </button>
       </div>
-      <div class="agent-key-meta">状态：有效 · 长期有效（重新生成后旧 Key 立即失效）</div>
-      <button class="btn" id="regenKeyBtn" style="width:100%;justify-content:center">重新获取</button>
+      <div class="agent-key-meta" data-i18n="agent.keymeta">状态：有效 · 长期有效（重新生成后旧 Key 立即失效）</div>
+      <button class="btn" id="regenKeyBtn" style="width:100%;justify-content:center" data-i18n="agent.regen">重新获取</button>
     </div>
-    <p class="setting-note">提示词中的下载地址指向本机服务，智能体需与 Fox Converter 在同一台电脑；跨机访问请用本机局域网 IP 并开放防火墙。已兼容 openclaw 系（WinClaw）与 Claude/AgentSkills 规范。</p>
+    <p class="setting-note" data-i18n="agent.note">提示词中的下载地址指向本机服务，智能体需与 Fox Converter 在同一台电脑；跨机访问请用本机局域网 IP 并开放防火墙。已兼容 openclaw 系（WinClaw）与 Claude/AgentSkills 规范。</p>
   </div>
 </div>
 
 <!-- ═══ 查找清理面板 ═══ -->
 <div class="settings-panel panel-wide" id="cleanupPanel" style="display:none">
   <div class="settings-header">
-    <h2>查找清理</h2>
-    <button class="icon-btn" id="cleanupCloseBtn" aria-label="关闭">
+    <h2 data-i18n="nav.cleanup">查找清理</h2>
+    <button class="icon-btn" id="cleanupCloseBtn" aria-label="close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
   </div>
   <div class="cleanup-body">
-    <p class="cleanup-intro">按条件找出已转换的邮件，勾选后删除。两种删法：只把邮件从列表里移出（磁盘文件保留），或连文件一起删（释放空间）。删之前会让再确认一次。</p>
+    <p class="cleanup-intro" data-i18n="cleanup.intro">按条件找出已转换的邮件，勾选后删除。两种删法：只把邮件从列表里移出（磁盘文件保留），或连文件一起删（释放空间）。删之前会让再确认一次。</p>
     <div class="cond-grid">
-      <div class="cond-item"><label>发件人</label><input type="text" id="cfSender" placeholder="邮箱或名称包含…" spellcheck="false"></div>
-      <div class="cond-item"><label>主题</label><input type="text" id="cfSubject" placeholder="主题包含…" spellcheck="false"></div>
+      <div class="cond-item"><label data-i18n="cleanup.sender">发件人</label><input type="text" id="cfSender" data-i18n-ph="cleanup.sender.ph" spellcheck="false"></div>
+      <div class="cond-item"><label data-i18n="cleanup.subject">主题</label><input type="text" id="cfSubject" data-i18n-ph="cleanup.subject.ph" spellcheck="false"></div>
       <div class="cond-item cond-pair">
-        <label>日期从</label>
+        <label data-i18n="cleanup.dateFrom">日期从</label>
         <input type="date" id="cfDateFrom">
-        <span class="cond-sep">到</span>
+        <span class="cond-sep" data-i18n="cleanup.dateTo">到</span>
         <input type="date" id="cfDateTo">
       </div>
       <div class="cond-item cond-pair">
-        <label>大小（MB）</label>
-        <input type="number" id="cfMinMb" placeholder="最小" min="0">
-        <span class="cond-sep">至</span>
-        <input type="number" id="cfMaxMb" placeholder="最大" min="0">
+        <label data-i18n="cleanup.size">大小（MB）</label>
+        <input type="number" id="cfMinMb" data-i18n-ph="cleanup.min" placeholder="最小" min="0">
+        <span class="cond-sep">–</span>
+        <input type="number" id="cfMaxMb" data-i18n-ph="cleanup.max" placeholder="最大" min="0">
       </div>
     </div>
     <div class="cond-actions">
-      <button class="btn btn-primary" id="cleanupFindBtn">查 找</button>
-      <button class="btn" id="cleanupResetBtn">清空条件</button>
+      <button class="btn btn-primary" id="cleanupFindBtn" data-i18n="cleanup.find">查 找</button>
+      <button class="btn" id="cleanupResetBtn" data-i18n="cleanup.reset">清空条件</button>
     </div>
     <div class="cleanup-summary num" id="cleanupSummary" style="display:none"></div>
     <div class="cleanup-results" id="cleanupResults" style="display:none"></div>
     <div class="cleanup-actions" id="cleanupActions" style="display:none">
       <div class="mode-row">
-        <label><input type="radio" name="delMode" value="full" checked> 彻底删除（连 MD/纯文本/附件一起）</label>
-        <label><input type="radio" name="delMode" value="index"> 仅移出列表（文件保留）</label>
+        <label><input type="radio" name="delMode" value="full" checked> <span data-i18n="cleanup.mode.full">彻底删除（连 MD/纯文本/附件一起）</span></label>
+        <label><input type="radio" name="delMode" value="index"> <span data-i18n="cleanup.mode.index">仅移出列表（文件保留）</span></label>
       </div>
-      <button class="btn btn-danger" id="cleanupDelBtn" disabled>删除选中</button>
+      <button class="btn btn-danger" id="cleanupDelBtn" disabled data-i18n="cleanup.del">删除选中</button>
     </div>
   </div>
 </div>
@@ -275,50 +282,51 @@
 <!-- ═══ 操作指南面板 ═══ -->
 <div class="settings-panel" id="guidePanel" style="display:none">
   <div class="settings-header">
-    <h2>使用说明</h2>
-    <button class="icon-btn" id="guideCloseBtn" aria-label="关闭">
+    <h2 data-i18n="guide.title">使用说明</h2>
+    <button class="icon-btn" id="guideCloseBtn" aria-label="close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
   </div>
-  <div class="settings-body guide-body">
+  <div class="settings-body guide-body" id="guideBody">
     <section>
-      <h3>导入存档</h3>
-      <p>点左下角「导入 .fox 文件」，选一个或多个 .fox，也可以直接选文件夹。大文件要跑几分钟，进度条会动。第一次用的话，先把设置里的存储位置改到空间够的盘。</p>
+      <h3 data-i18n="guide.import.h">导入存档</h3>
+      <p data-i18n="guide.import.p"></p>
     </section>
     <section>
-      <h3>看邮件</h3>
-      <p>左侧点一封，右边看正文。正文有三种看法：原文（和 Foxmail 里一样）、Markdown、纯文本，右上角切换，旁边有复制按钮。有附件的邮件会多一个「附件」页，进去能单独下载。</p>
+      <h3 data-i18n="guide.read.h">看邮件</h3>
+      <p data-i18n="guide.read.p"></p>
     </section>
     <section>
-      <h3>搜索和分组</h3>
-      <p>搜索框输入关键词，主题、发件人、正文都能搜到，中文没问题。「分组」下拉可以把同一件事的来往邮件归到一起（按主题），也能按发件人、收件人分。</p>
+      <h3 data-i18n="guide.search.h">搜索和分组</h3>
+      <p data-i18n="guide.search.p"></p>
     </section>
     <section>
-      <h3>清理空间</h3>
-      <p>「查找清理」页按发件人、主题、日期、大小把邮件筛出来，勾选后删除。删法有两种：只从列表移出（文件留着），或者连文件一起删掉腾空间。删之前会再让你确认一次，删掉的内容重导对应的 .fox 就能找回来。</p>
+      <h3 data-i18n="guide.clean.h">清理空间</h3>
+      <p data-i18n="guide.clean.p"></p>
     </section>
     <section>
-      <h3>存储位置</h3>
-      <p>设置页里两样东西可以换地方：存档数据（数据库）和导出文件（MD/纯文本/附件）。改成想要的盘，点「迁移到新位置」，文件会自动搬过去，旧位置清空。以后导入的都存到这里，不会再写 C 盘。</p>
+      <h3 data-i18n="guide.storage.h">存储位置</h3>
+      <p data-i18n="guide.storage.p"></p>
     </section>
     <section>
-      <h3>Agent 接入</h3>
-      <p>「Agent 接入」页复制两段内容发给智能体（比如 WinClaw 小龙虾）：先发提示词装技能，再发 Key 完成配置。之后直接跟它说"查一下某某的邮件"就行。</p>
+      <h3 data-i18n="guide.agent.h">Agent 接入</h3>
+      <p data-i18n="guide.agent.p"></p>
     </section>
   </div>
 </div>
-
-<div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <!-- 后端失联横幅：页面是残留标签而服务已停止时给出明确指引 -->
 <div class="offline-banner" id="offlineBanner" style="display:none" role="alert">
   <div>
-    <strong>Fox Converter 服务未运行</strong>
-    <span>当前页面已与后端失联。请双击桌面图标启动软件，然后点击重新连接。</span>
+    <strong data-i18n="offline.title">Fox Converter 服务未运行</strong>
+    <span data-i18n="offline.body">当前页面已与后端失联。请双击桌面图标启动软件，然后点击重新连接。</span>
   </div>
-  <button class="btn btn-primary" id="reconnectBtn">重新连接</button>
+  <button class="btn btn-primary" id="reconnectBtn" data-i18n="offline.reconnect">重新连接</button>
 </div>
 
-<script src="app.js?v=20260910d"></script>
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script src="i18n.js?v=20260911a"></script>
+<script src="app.js?v=20260911a"></script>
 </body>
 </html>

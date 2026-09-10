@@ -198,6 +198,17 @@ def _run_tray(url: str, cfg: dict):
     import pystray
     from PIL import Image
 
+    lang = cfg.get('lang', 'zh-CN')
+    L = {
+        'zh-CN': {'open': '打开界面', 'exp': '打开导出目录', 'quit': '退出',
+                  'tip': 'Fox Converter — 邮件存档转换'},
+        'en': {'open': 'Open interface', 'exp': 'Open export folder', 'quit': 'Quit',
+               'tip': 'Fox Converter — mail archive converter'},
+    }.get(lang) or {
+        'open': 'Open interface', 'exp': 'Open export folder', 'quit': 'Quit',
+        'tip': 'Fox Converter',
+    }
+
     icon_path = _resource_path(os.path.join('assets', 'icon.png'))
     try:
         image = Image.open(icon_path)
@@ -218,11 +229,11 @@ def _run_tray(url: str, cfg: dict):
         os._exit(0)
 
     menu = pystray.Menu(
-        pystray.MenuItem('打开界面', on_open, default=True),
-        pystray.MenuItem('打开导出目录', on_open_dir),
-        pystray.MenuItem('退出', on_quit),
+        pystray.MenuItem(L['open'], on_open, default=True),
+        pystray.MenuItem(L['exp'], on_open_dir),
+        pystray.MenuItem(L['quit'], on_quit),
     )
-    icon = pystray.Icon('foxconverter', image, 'Fox Converter — 邮件存档转换', menu)
+    icon = pystray.Icon('foxconverter', image, L['tip'], menu)
     icon.run()
 
 

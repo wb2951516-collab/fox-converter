@@ -1,10 +1,27 @@
 /* ═══════════════════════════════════════════════════════════
-   Fox Converter 前端逻辑
+   Fox Converter 前端逻辑（多语言版）
    ═══════════════════════════════════════════════════════════ */
 'use strict';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
+
+let LANG = 'zh-CN';
+
+function t(key, vars) {
+  const dict = window.I18N[LANG] || window.I18N['zh-CN'];
+  let s = dict[key] ?? window.I18N['zh-CN'][key] ?? key;
+  if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
+  return s;
+}
+
+function applyLang(lang) {
+  LANG = window.I18N[lang] ? lang : 'zh-CN';
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  document.title = LANG === 'en' ? 'Fox Converter' : 'Fox Converter — 邮件存档转换阅读器';
+}
 
 const state = {
   source: '',
@@ -20,7 +37,7 @@ const state = {
   currentView: 'html',
   expandedGroups: new Set(),
   confirmDeleteId: null,
-  exportConfigured: null,   // null=未知
+  exportConfigured: null,
 };
 
 /* ── 工具 ─────────────────────────────────────────────── */
@@ -74,15 +91,12 @@ function toast(msg) {
 }
 
 function debounce(fn, ms) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
+  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail || detail; } catch {}
@@ -96,10 +110,8 @@ function applyTheme(theme, accent) {
   if (accent) {
     document.documentElement.style.setProperty('--primary', accent);
     document.documentElement.style.setProperty('--primary-hover', accent);
-    document.documentElement.style.setProperty('--primary-soft',
-      `color-mix(in srgb, ${accent} 10%, transparent)`);
-    document.documentElement.style.setProperty('--selected',
-      `color-mix(in srgb, ${accent} 7%, transparent)`);
+    document.documentElement.style.setProperty('--primary-soft', `color-mix(in srgb, ${accent} 10%, transparent)`);
+    document.documentElement.style.setProperty('--selected', `color-mix(in srgb, ${accent} 7%, transparent)`);
   }
 }
 
@@ -108,10 +120,9 @@ function esc(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/* ── 主题归一（分组用）────────────────────────────────── */
 function normSubject(s) {
   let out = String(s || '').trim();
-  while (true) {
+  for (;;) {
     const next = out
       .replace(/^\s*((re|fw|fwd|aw|sv)\s*[:：]\s*)/i, '')
       .replace(/^\s*(回复|转发|答复|转送)\s*[:：]\s*/, '')
@@ -119,24 +130,12 @@ function normSubject(s) {
     if (next === out) break;
     out = next;
   }
-  return out.trim() || '(无主题)';
+  return out.trim() || '(no subject)';
 }
 
 function addrKey(s) {
   const m = String(s || '').match(/<([^>]+)>/);
-  return (m ? m[1] : String(s || '')).trim() || '(空)';
-}
-
-function attIcon(name) {
-  const ext = String(name || '').split('.').pop().toLowerCase();
-  const map = {
-    pdf: 'M7 3h8l4 4v14H7z M15 3v5h5',
-    doc: 'M7 3h8l4 4v14H7z M15 3v5h5',
-    xls: 'M7 3h8l4 4v14H7z M15 3v5h5',
-    zip: 'M7 3h8l4 4v14H7z M15 3v5h5',
-    rar: 'M7 3h8l4 4v14H7z M15 3v5h5',
-  };
-  return map[ext] || map.pdf;
+  return (m ? m[1] : String(s || '')).trim() || '(empty)';
 }
 
 /* ── 邮件列表 ─────────────────────────────────────────── */
@@ -145,14 +144,15 @@ async function loadMails() {
   const params = new URLSearchParams({
     page: grouped ? 1 : state.page,
     per_page: grouped ? 2000 : state.perPage,
-    search: state.search, order: state.order,
+    search: state.search,
+    order: state.order,
   });
   if (state.archiveId) params.set('archive_id', state.archiveId);
   const data = await api(`/api/mails?${params}`);
   state.total = data.total;
   if (grouped) {
     renderGroupedMails(data.items);
-    $('#listFooter').innerHTML = `<span class="num">共 ${data.items.length} 封 · ${groupsLabel()}</span>`;
+    $('#listFooter').innerHTML = `<span class="num">${t('cleanup.found', { n: data.items.length, size: '' }).split('·')[0].trim()} · ${groupsLabel()}</span>`;
   } else {
     renderMailList(data.items);
     renderPagination();
@@ -161,13 +161,13 @@ async function loadMails() {
 }
 
 function groupsLabel() {
-  return { subject: '按主题分组', from: '按发件人分组', to: '按收件人分组' }[state.group] || '';
+  return { subject: t('grouped.subject'), from: t('grouped.from'), to: t('grouped.to') }[state.group] || '';
 }
 
 function renderGroupedMails(items) {
   const box = $('#mailList');
   if (!items.length) {
-    box.innerHTML = `<div class="empty-state"><p>${state.search ? '没有匹配的邮件' : '暂无邮件'}</p></div>`;
+    box.innerHTML = `<div class="empty-state"><p>${state.search ? t('empty.nomatch') : t('empty.list')}</p></div>`;
     return;
   }
   const keyOf = (m) => {
@@ -183,7 +183,7 @@ function renderGroupedMails(items) {
     groups.get(k).push(m);
   }
   const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-
+  const attSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.5 3.5 0 015 5L10.5 19a2 2 0 01-3-3l6.5-6.5"/></svg>';
   const itemHtml = (m) => `
     <button class="mail-item ${m.id === state.selectedId ? 'selected' : ''}" data-id="${m.id}" aria-label="${esc(m.subject)}">
       <div class="mail-item-top">
@@ -191,13 +191,8 @@ function renderGroupedMails(items) {
         <span class="mail-date">${fmtDate(m.date)}</span>
       </div>
       ${state.group === 'from' ? '' : `<div class="mail-subject">${esc(m.subject)}</div>`}
-      ${m.has_attachments ? `
-      <div class="mail-att-badge">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.5 3.5 0 015 5L10.5 19a2 2 0 01-3-3l6.5-6.5"/></svg>
-        ${m.attachment_count} 个附件
-      </div>` : ''}
+      ${m.has_attachments ? `<div class="mail-att-badge">${attSvg}${m.attachment_count}</div>` : ''}
     </button>`;
-
   box.innerHTML = sorted.map(([key, mails], gi) => {
     const open = state.expandedGroups.has(key) || gi === 0;
     return `
@@ -212,13 +207,12 @@ function renderGroupedMails(items) {
         </div>
       </div>`;
   }).join('');
-
   box.querySelectorAll('.group-header').forEach((h) => {
     h.addEventListener('click', () => {
       const key = h.dataset.key;
-      const body = h.nextElementSibling;
-      const open = body.style.display === 'none';
-      body.style.display = open ? 'block' : 'none';
+      const grpBody = h.nextElementSibling;
+      const open = grpBody.style.display === 'none';
+      grpBody.style.display = open ? 'block' : 'none';
       h.setAttribute('aria-expanded', String(open));
       h.querySelector('.chev')?.classList.toggle('open', open);
       if (open) state.expandedGroups.add(key); else state.expandedGroups.delete(key);
@@ -232,15 +226,10 @@ function renderGroupedMails(items) {
 function renderMailList(items) {
   const box = $('#mailList');
   if (!items.length) {
-    box.innerHTML = `
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="40" height="40" style="opacity:.35">
-          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-        </svg>
-        <p>${state.search ? '没有匹配的邮件' : '暂无邮件，请先导入 .fox 存档'}</p>
-      </div>`;
+    box.innerHTML = `<div class="empty-state"><p>${state.search ? t('empty.nomatch') : t('empty.list')}</p></div>`;
     return;
   }
+  const attSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.5 3.5 0 015 5L10.5 19a2 2 0 01-3-3l6.5-6.5"/></svg>';
   box.innerHTML = items.map((m) => `
     <button class="mail-item ${m.id === state.selectedId ? 'selected' : ''}" data-id="${m.id}" aria-label="${esc(m.subject)}">
       <div class="mail-item-top">
@@ -248,13 +237,8 @@ function renderMailList(items) {
         <span class="mail-date">${fmtDate(m.date)}</span>
       </div>
       <div class="mail-subject">${esc(m.subject)}</div>
-      ${m.has_attachments ? `
-      <div class="mail-att-badge">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.5 3.5 0 015 5L10.5 19a2 2 0 01-3-3l6.5-6.5"/></svg>
-        ${m.attachment_count} 个附件
-      </div>` : ''}
+      ${m.has_attachments ? `<div class="mail-att-badge">${attSvg}${m.attachment_count}</div>` : ''}
     </button>`).join('');
-
   box.querySelectorAll('.mail-item').forEach((el) => {
     el.addEventListener('click', () => selectMail(+el.dataset.id));
   });
@@ -263,7 +247,10 @@ function renderMailList(items) {
 function renderPagination() {
   const totalPages = Math.max(1, Math.ceil(state.total / state.perPage));
   const footer = $('#listFooter');
-  if (totalPages <= 1) { footer.innerHTML = `<span class="num">${state.total} 封</span>`; return; }
+  if (totalPages <= 1) {
+    footer.innerHTML = `<span class="num">${t('list.count', { n: state.total })}</span>`;
+    return;
+  }
   const cur = state.page;
   const btn = (p, label = p, disabled = false, active = false) =>
     `<button class="page-btn ${active ? 'active' : ''}" ${disabled ? 'disabled' : ''} data-page="${p}">${label}</button>`;
@@ -273,9 +260,7 @@ function renderPagination() {
     if (p === 1 || p === totalPages || Math.abs(p - cur) <= 1) pages.push(p);
     else if (pages[pages.length - 1] !== '…') pages.push('…');
   }
-  for (const p of pages) {
-    html += p === '…' ? '<span>…</span>' : btn(p, p, false, p === cur);
-  }
+  for (const p of pages) html += p === '…' ? '<span>…</span>' : btn(p, p, false, p === cur);
   html += btn(cur + 1, '›', cur >= totalPages);
   footer.innerHTML = html;
   footer.querySelectorAll('.page-btn').forEach((el) => {
@@ -293,10 +278,10 @@ async function renderStats() {
   const params = state.archiveId ? `?archive_id=${state.archiveId}` : '';
   const s = await api(`/api/stats${params}`);
   $('#sidebarStats').innerHTML = s.total ? `
-    <div class="stat-row"><span class="stat-label">邮件</span><span class="stat-value num">${s.total}</span></div>
-    <div class="stat-row"><span class="stat-label">附件</span><span class="stat-value num">${s.attachment_count}</span></div>
-    <div class="stat-row"><span class="stat-label">总量</span><span class="stat-value num">${fmtSize(s.total_size)}</span></div>
-    ${s.min_date ? `<div class="stat-row"><span class="stat-label">时间</span><span class="stat-value num">${dateRange(s.min_date, s.max_date)}</span></div>` : ''}
+    <div class="stat-row"><span class="stat-label">${t('st.mail')}</span><span class="stat-value num">${s.total}</span></div>
+    <div class="stat-row"><span class="stat-label">${t('st.att')}</span><span class="stat-value num">${s.attachment_count}</span></div>
+    <div class="stat-row"><span class="stat-label">${t('st.size')}</span><span class="stat-value num">${fmtSize(s.total_size)}</span></div>
+    ${s.min_date ? `<div class="stat-row"><span class="stat-label">${t('st.range')}</span><span class="stat-value num">${dateRange(s.min_date, s.max_date)}</span></div>` : ''}
   ` : '';
 }
 
@@ -304,22 +289,17 @@ async function renderStats() {
 async function loadArchives() {
   const data = await api('/api/archives');
   const box = $('#archiveList');
+  const attSvg = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>';
+  const delSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>';
+  const homeSvg = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0h6"/></svg>';
   const item = (a) => `
-    <button class="archive-item ${a.id === state.archiveId ? 'selected' : ''}" data-id="${a.id}" title="${esc(a.name)}（${fmtSize(a.total_size)}）">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
-      <span class="archive-name">${esc(a.name)}</span>
-      <span class="archive-count num">${a.email_count}</span>
-      <span class="archive-del" data-del="${a.id}" role="button" aria-label="删除存档 ${esc(a.name)}" title="删除此存档">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
-      </span>
+    <button class="archive-item ${a.id === state.archiveId ? 'selected' : ''}" data-id="${a.id}" title="${esc(a.name)} (${fmtSize(a.total_size)})">
+      ${attSvg}<span class="archive-name">${esc(a.name)}</span><span class="archive-count num">${a.email_count}</span>
+      <span class="archive-del" data-del="${a.id}" role="button" aria-label="delete ${esc(a.name)}" title="delete">${delSvg}</span>
     </button>`;
   box.innerHTML =
-    `<button class="archive-item ${state.archiveId === 0 ? 'selected' : ''}" data-id="0">
-       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0h6"/></svg>
-       <span class="archive-name">全部存档</span>
-     </button>` +
+    `<button class="archive-item ${state.archiveId === 0 ? 'selected' : ''}" data-id="0">${homeSvg}<span class="archive-name">${t('side.all')}</span></button>` +
     data.archives.map(item).join('');
-
   box.querySelectorAll('.archive-item').forEach((el) => {
     el.addEventListener('click', (ev) => {
       if (ev.target.closest('.archive-del')) return;
@@ -342,9 +322,9 @@ async function loadArchives() {
 async function requestDeleteArchive(id) {
   if (state.confirmDeleteId === id) {
     state.confirmDeleteId = null;
-    toast('正在删除存档…');
+    toast(t('cleanup.deleting'));
     await api(`/api/archives/${id}`, { method: 'DELETE' });
-    toast('存档已删除');
+    toast(t('cleanup.deleted.arc'));
     if (state.archiveId === id) state.archiveId = 0;
     loadArchives();
     loadMails();
@@ -353,12 +333,9 @@ async function requestDeleteArchive(id) {
     const btn = document.querySelector(`.archive-del[data-del="${id}"]`);
     if (btn) {
       btn.classList.add('confirm');
-      btn.innerHTML = '<span style="font-size:.6875rem;white-space:nowrap">确认删除</span>';
+      btn.innerHTML = '<span style="font-size:.6875rem;white-space:nowrap">✓</span>';
       setTimeout(() => {
-        if (state.confirmDeleteId === id) {
-          state.confirmDeleteId = null;
-          loadArchives();
-        }
+        if (state.confirmDeleteId === id) { state.confirmDeleteId = null; loadArchives(); }
       }, 3000);
     }
   }
@@ -371,18 +348,13 @@ async function selectMail(id) {
   const mail = await api(`/api/mails/${id}`);
   state.currentMail = mail;
   state.currentView = 'html';
-
   $('#readerEmpty').style.display = 'none';
   $('#readerActive').style.display = 'flex';
   $('#readerPanel').classList.add('mobile-visible');
   $('#listPanel').classList.remove('mobile-visible');
-
   $('#readerMeta').textContent = `${mail.from} · ${fmtDateFull(mail.date)}`;
-
-  // 附件 tab：有附件才显示
   const attTab = document.querySelector('.tab[data-view="atts"]');
   attTab.style.display = mail.attachment_names.length ? '' : 'none';
-
   renderBody();
 }
 
@@ -391,37 +363,29 @@ function renderBody() {
   if (!mail) return;
   const body = $('#readerBody');
   const view = state.currentView;
-
-  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
+  $$('.tab').forEach((tb) => tb.classList.toggle('active', tb.dataset.view === view));
 
   if (view === 'html') {
     body.innerHTML = `
       <div class="mail-header">
         <h1 class="mail-title">${esc(mail.subject)}</h1>
         <div class="mail-meta-grid">
-          <span class="mail-meta-label">发件人</span><span class="mail-meta-value">${esc(mail.from)}</span>
-          <span class="mail-meta-label">收件人</span><span class="mail-meta-value">${esc(mail.to)}</span>
-          ${mail.cc ? `<span class="mail-meta-label">抄送</span><span class="mail-meta-value">${esc(mail.cc)}</span>` : ''}
-          <span class="mail-meta-label">时间</span><span class="mail-meta-value">${fmtDateFull(mail.date)}</span>
+          <span class="mail-meta-label">${t('reader.from')}</span><span class="mail-meta-value">${esc(mail.from)}</span>
+          <span class="mail-meta-label">${t('reader.to')}</span><span class="mail-meta-value">${esc(mail.to)}</span>
+          ${mail.cc ? `<span class="mail-meta-label">${t('reader.cc')}</span><span class="mail-meta-value">${esc(mail.cc)}</span>` : ''}
+          <span class="mail-meta-label">${t('reader.date')}</span><span class="mail-meta-value">${fmtDateFull(mail.date)}</span>
         </div>
       </div>
-      <div class="reader-content html-view">${sanitizeHtml(mail.body_html, mail.id) || '(空正文)'}</div>`;
+      <div class="reader-content html-view">${sanitizeHtml(mail.body_html, mail.id) || t('reader.emptyBody')}</div>`;
   } else if (view === 'md') {
-    body.innerHTML = `<pre class="md-view">${esc(mail.body_md || '(空)')}</pre>`;
+    body.innerHTML = `<pre class="md-view">${esc(mail.body_md || '')}</pre>`;
   } else if (view === 'text') {
-    body.innerHTML = `<div class="reader-content plain-view">${esc(mail.body_text || '(空)')}</div>`;
+    body.innerHTML = `<div class="reader-content plain-view">${esc(mail.body_text || '')}</div>`;
   } else if (view === 'atts') {
-    // 防御：无附件邮件永远不渲染附件视图（tab 已隐藏时的兜底）
-    if (!mail.attachment_names.length) {
-      state.currentView = 'html';
-      return renderBody();
-    }
+    if (!mail.attachment_names.length) { state.currentView = 'html'; return renderBody(); }
     body.innerHTML = renderAttachmentsView(mail);
     body.querySelectorAll('[data-att-index]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const i = +el.dataset.attIndex;
-        triggerDownload(mail, i);
-      });
+      el.addEventListener('click', () => triggerDownload(mail, +el.dataset.attIndex));
     });
   }
   body.scrollTop = 0;
@@ -436,17 +400,17 @@ function renderAttachmentsView(mail) {
         <svg class="att-row-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
         <div class="att-row-main">
           <div class="att-row-name" title="${esc(name)}">${esc(name)}</div>
-          <div class="att-row-sub">${esc(ext)} 文件 · ${esc(rel)}</div>
+          <div class="att-row-sub">${esc(ext)} · ${esc(rel)}</div>
         </div>
         <button class="btn btn-sm" data-att-index="${i}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-          下载
+          ${t('atts.download')}
         </button>
       </div>`;
   }).join('');
   return `
     <div class="reader-content atts-view">
-      <div class="atts-title">本邮件共 ${mail.attachment_names.length} 个附件</div>
+      <div class="atts-title">${t('atts.count', { n: mail.attachment_names.length })}</div>
       <div class="atts-list">${rows}</div>
     </div>`;
 }
@@ -454,17 +418,16 @@ function renderAttachmentsView(mail) {
 function triggerDownload(mail, i) {
   const rel = mail.attachment_files[i];
   if (!rel) return;
-  const url = `/api/attachment/${mail.id}/${rel}`;
   const a = document.createElement('a');
-  a.href = url;
+  a.href = `/api/attachment/${mail.id}/${rel}`;
   a.download = mail.attachment_names[i] || '';
   document.body.appendChild(a);
   a.click();
   a.remove();
-  toast(`开始下载：${mail.attachment_names[i]}`);
+  toast(t('atts.dlStart', { name: mail.attachment_names[i] }));
 }
 
-/* 防 XSS + 内嵌图片改为 API 路径（否则导出目录不在前端同源下图片全部裂图） */
+/* 防 XSS + 内嵌图片改为 API 路径 */
 function sanitizeHtml(html, mailId) {
   if (!html) return '';
   const tpl = document.createElement('template');
@@ -502,7 +465,25 @@ function sanitizeHtml(html, mailId) {
 let pickedPaths = [];
 
 function openBrowse() {
-  pickedPaths = [];
+  if (state.exportConfigured === false) {
+    $('#setupNotice').style.display = 'block';
+    $('#parseStepSelect').style.display = 'block';
+    $('#parseStepProgress').style.display = 'none';
+    $('#parseStepDone').style.display = 'none';
+    $('#parseFileList').style.display = 'none';
+    $('#diskLine').style.display = 'none';
+    $('#startParseBtn').style.display = 'none';
+    $('#manualPath').value = '';
+    $('#browseBtn').disabled = true;
+    $('#browseFolderBtn').disabled = true;
+    $('#useManualPathBtn').disabled = true;
+    $('#parseModal').style.display = 'flex';
+    return;
+  }
+  $('#setupNotice').style.display = 'none';
+  $('#browseBtn').disabled = false;
+  $('#browseFolderBtn').disabled = false;
+  $('#useManualPathBtn').disabled = false;
   $('#parseStepSelect').style.display = 'block';
   $('#parseStepProgress').style.display = 'none';
   $('#parseStepDone').style.display = 'none';
@@ -514,20 +495,12 @@ function openBrowse() {
   $('#parseModal').style.display = 'flex';
 }
 
-async function refreshExportConfigured() {
-  try {
-    const p = await api('/api/paths');
-    state.exportConfigured = !!p.export_configured;
-  } catch {}
-  return state.exportConfigured;
-}
-
 async function pickPaths(paths) {
   const newOnes = paths.filter((p) => p && !pickedPaths.some((v) => v.path === p));
   if (!newOnes.length) return;
   const btns = [$('#browseBtn'), $('#browseFolderBtn'), $('#useManualPathBtn')];
-  btns.forEach((b) => (b.disabled = true));
-  const verified = [...pickedPaths];      // {path,size,total}
+  btns.forEach((b) => { b.disabled = true; });
+  const verified = [...pickedPaths];
   const checking = newOnes.map((p) => ({ path: p, done: false, error: '' }));
   const box = $('#parseFileList');
   box.style.display = 'block';
@@ -536,12 +509,12 @@ async function pickPaths(paths) {
       verified.map((v) => `
         <div class="picked-row">
           <span class="picked-name" title="${esc(v.path)}">${esc(v.path.split(/[\\/]/).pop())}</span>
-          <span class="picked-meta num">${fmtSize(v.size)} · ${v.total != null ? v.total + ' 封' : ''}</span>
+          <span class="picked-meta num">${fmtSize(v.size)} · ${v.total != null ? v.total : ''}</span>
         </div>`).join('') +
       checking.filter((c) => !c.done).map((c) => `
         <div class="picked-row checking">
           <span class="picked-name">${esc(c.path.split(/[\\/]/).pop())}</span>
-          <span class="picked-meta">检查中…</span>
+          <span class="picked-meta">${t('import.checking')}</span>
         </div>`).join('') +
       checking.filter((c) => c.done && c.error).map((c) => `
         <div class="picked-row checking">
@@ -562,23 +535,20 @@ async function pickPaths(paths) {
     if (c) c.done = true;
     render();
   }
-  btns.forEach((b) => (b.disabled = false));
+  btns.forEach((b) => { b.disabled = false; });
   pickedPaths = verified.map((v) => v.path);
   let disk = null;
   try {
-    disk = await api('/api/diskcheck', {
-      method: 'POST',
-      body: JSON.stringify({ paths: pickedPaths }),
-    });
+    disk = await api('/api/diskcheck', { method: 'POST', body: JSON.stringify({ paths: pickedPaths }) });
   } catch {}
   const line = $('#diskLine');
   if (disk) {
     line.style.display = 'block';
     const ok = disk.free >= disk.need;
-    line.innerHTML = `导出位置 <span title="${esc(disk.export_root)}">${esc(disk.export_root)}</span>` +
-      ` · 约需 ${fmtSize(disk.need)} · 该位置可用 ${fmtSize(disk.free)}` +
-      (ok ? ' <span style="color:var(--success)">✓</span>'
-          : ' <span style="color:var(--danger)">空间不足，请到设置页更换导出目录</span>');
+    line.innerHTML = `${t('import.disk.pos')} <span title="${esc(disk.export_root)}">${esc(disk.export_root)}</span>` +
+      ` · ${t('import.disk.need')} ${fmtSize(disk.need)} · ${t('import.disk.free')} ${fmtSize(disk.free)}` +
+      (ok ? ` <span style="color:var(--success)">${t('import.disk.ok')}</span>`
+          : ` <span style="color:var(--danger)">${t('import.disk.lack')}</span>`);
     $('#startParseBtn').disabled = !ok;
   } else {
     line.style.display = 'none';
@@ -589,26 +559,26 @@ async function pickPaths(paths) {
 async function browseFile() {
   try {
     const res = await api('/api/browse', { method: 'POST' });
-    if (res.skipped) toast(`${res.skipped} 个非 .fox 文件已跳过`);
+    if (res.skipped) toast(t('import.nonFox', { n: res.skipped }));
     await pickPaths(res.paths || []);
   } catch (e) {
-    toast(`选择失败：${e.message}`);
+    toast(t('import.pickFail', { msg: e.message }));
   }
 }
 
 async function browseFolder() {
   try {
     const res = await api('/api/browse_folder', { method: 'POST' });
-    if (!(res.paths || []).length) { toast('该文件夹内未找到 .fox 存档'); return; }
+    if (!(res.paths || []).length) { toast(t('import.folderEmpty')); return; }
     await pickPaths(res.paths);
   } catch (e) {
-    toast(`选择失败：${e.message}`);
+    toast(t('import.folderFail', { msg: e.message }));
   }
 }
 
 async function useManualPath() {
   const raw = $('#manualPath').value.trim();
-  if (!raw) { toast('请输入文件路径'); return; }
+  if (!raw) { toast(t('import.manualEmpty')); return; }
   const paths = raw.split(/[\n;；]/).map((s) => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
   await pickPaths(paths);
 }
@@ -618,13 +588,10 @@ async function startParse() {
   $('#parseStepSelect').style.display = 'none';
   $('#parseStepProgress').style.display = 'block';
   try {
-    const res = await api('/api/parse', {
-      method: 'POST',
-      body: JSON.stringify({ paths: pickedPaths }),
-    });
+    const res = await api('/api/parse', { method: 'POST', body: JSON.stringify({ paths: pickedPaths }) });
     listenProgress(res.task_id);
   } catch (e) {
-    toast(`启动失败：${e.message}`);
+    toast(t('import.startFail', { msg: e.message }));
     openBrowse();
   }
 }
@@ -634,33 +601,26 @@ function listenProgress(taskId) {
   es.onmessage = (ev) => {
     const d = JSON.parse(ev.data);
     const filePct = d.total ? (d.current / d.total) * 100 : 0;
-    const overall = d.file_total
-      ? ((d.file_index - 1 + filePct / 100) / d.file_total) * 100
-      : 0;
+    const overall = d.file_total ? ((d.file_index - 1 + filePct / 100) / d.file_total) * 100 : 0;
     $('#progressFill').style.width = `${Math.min(100, overall).toFixed(1)}%`;
     if (d.status === 'done') {
-      $('#progressText').textContent = '导入完成';
-      $('#progressFile').textContent = `共 ${d.file_total} 个文件`;
-      $('#progressSub').textContent =
-        `新增 ${d.imported} 封 · 跳过重复 ${d.skipped} 封 · 失败 ${d.errors} · 耗时 ${d.elapsed.toFixed(1)} 秒`;
+      $('#progressText').textContent = t('import.done');
+      $('#progressFile').textContent = t('list.count', { n: d.file_total });
+      $('#progressSub').textContent = t('import.elapsed', { s: d.elapsed.toFixed(1) });
     } else {
-      $('#progressFile').textContent = `文件 ${d.file_index} / ${d.file_total}：${d.filename || ''}`;
-      $('#progressText').textContent =
-        `${d.current} / ${d.total || '…'}（${filePct.toFixed(0)}%）`;
+      $('#progressFile').textContent = t('import.file.n', { i: d.file_index, n: d.file_total, name: d.filename || '' });
+      $('#progressText').textContent = t('import.progress', { cur: d.current, total: d.total || '…', pct: filePct.toFixed(0) });
       $('#progressSub').textContent = d.subject || '';
     }
-    const df = $('#doneFiles');
-    df.textContent = (d.done_files || []).map((f) => `✓ ${f}`).join('　');
+    $('#doneFiles').textContent = (d.done_files || []).join(' · ');
     if (d.status === 'done' || d.status === 'cancelled') {
       es.close();
-      if (d.status === 'cancelled') toast('导入已取消');
       $('#parseStepProgress').style.display = 'none';
       $('#parseStepDone').style.display = 'block';
-      $('#doneText').innerHTML =
-        `已导入 <strong class="num">${d.imported}</strong> 封邮件` +
-        (d.skipped ? `，跳过重复 <strong class="num">${d.skipped}</strong> 封` : '') +
-        (d.errors ? `，<span style="color:var(--danger)">失败 ${d.errors} 封</span>` : '') +
-        `<br><span style="font-size:.8125rem;color:var(--text-3)">耗时 ${d.elapsed.toFixed(1)} 秒</span>`;
+      $('#doneText').innerHTML = t('import.doneLine', { n: d.imported }) +
+        (d.skipped ? t('import.skippedLine', { n: d.skipped }) : '') +
+        (d.errors ? t('import.errSuffix', { n: d.errors }) : '') +
+        `<br><span style="font-size:.8125rem;color:var(--text-3)">${t('import.elapsed', { s: d.elapsed.toFixed(1) })}</span>`;
       state.page = 1;
       state.search = '';
       $('#searchInput').value = '';
@@ -668,7 +628,7 @@ function listenProgress(taskId) {
       loadMails();
     } else if (d.status === 'error') {
       es.close();
-      toast(`导入失败：${d.error}`);
+      toast(t('import.parseFail', { msg: d.error }));
       openBrowse();
     }
   };
@@ -678,24 +638,18 @@ function listenProgress(taskId) {
 /* ── 事件绑定 ─────────────────────────────────────────── */
 function bindEvents() {
   $$('.nav-item[data-route]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       $$('.nav-item[data-route]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       $('#settingsPanel').style.display = 'none';
       $('#agentPanel').style.display = 'none';
       $('#cleanupPanel').style.display = 'none';
       $('#guidePanel').style.display = 'none';
-      if (btn.dataset.route === 'settings') {
-        $('#settingsPanel').style.display = 'flex';
-        loadSettings();
-      } else if (btn.dataset.route === 'agent') {
-        $('#agentPanel').style.display = 'flex';
-        loadAgentKey();
-      } else if (btn.dataset.route === 'cleanup') {
-        $('#cleanupPanel').style.display = 'flex';
-      } else if (btn.dataset.route === 'guide') {
-        $('#guidePanel').style.display = 'flex';
-      }
+      const route = btn.dataset.route;
+      if (route === 'settings') { $('#settingsPanel').style.display = 'flex'; loadSettings(); }
+      else if (route === 'agent') { $('#agentPanel').style.display = 'flex'; loadAgentKey(); }
+      else if (route === 'cleanup') { $('#cleanupPanel').style.display = 'flex'; }
+      else if (route === 'guide') { $('#guidePanel').style.display = 'flex'; }
     });
   });
 
@@ -704,70 +658,19 @@ function bindEvents() {
   $('#browseFolderBtn').addEventListener('click', browseFolder);
   $('#useManualPathBtn').addEventListener('click', useManualPath);
   $('#startParseBtn').addEventListener('click', startParse);
-  $('#parseCloseBtn').addEventListener('click', () => { $('#parseModal').style.display = 'none'; });
-  $('#doneCloseBtn').addEventListener('click', () => { $('#parseModal').style.display = 'none'; });
-  $('#settingsCloseBtn').addEventListener('click', () => {
-    $('#settingsPanel').style.display = 'none';
-    $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
-  });
-  $('#agentCloseBtn').addEventListener('click', () => {
-    $('#agentPanel').style.display = 'none';
-    $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
-  });
-  $('#cleanupCloseBtn').addEventListener('click', () => {
-    $('#cleanupPanel').style.display = 'none';
-    $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
-  });
-  $('#guideCloseBtn').addEventListener('click', () => {
-    $('#guidePanel').style.display = 'none';
-    $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
-  });
-
-  // 查找清理
-  $('#cleanupFindBtn').addEventListener('click', findCleanup);
-  $('#cleanupResetBtn').addEventListener('click', () => {
-    ['cfSender', 'cfSubject', 'cfDateFrom', 'cfDateTo', 'cfMinMb', 'cfMaxMb'].forEach(
-      (id) => { $('#' + id).value = ''; });
-  });
-  $('#cleanupDelBtn').addEventListener('click', deleteCleanup);
-  $('#copyPromptBtn').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText($('#agentPrompt').textContent);
-      toast('提示词已复制，粘贴给智能体即可安装技能');
-    } catch { toast('复制失败'); }
-  });
-  $('#copyKeyBtn').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText($('#agentKey').textContent);
-      toast('API Key 已复制');
-    } catch { toast('复制失败'); }
-  });
-  $('#regenKeyBtn').addEventListener('click', async () => {
-    if (!confirm('重新生成后旧 Key 立即失效，已配置的智能体需要重新配置。继续？')) return;
-    const r = await api('/api/agent-key/regenerate', { method: 'POST' });
-    $('#agentKey').textContent = r.api_key;
-    toast('已重新生成 API Key');
-  });
-
-  // 存储位置
-  $('#browseDataDirBtn').addEventListener('click', async () => {
-    const r = await api('/api/browse_dir', { method: 'POST' });
-    if (r.path) $('#settingDataDir').value = r.path;
-  });
-  $('#browseExportDirBtn').addEventListener('click', async () => {
-    const r = await api('/api/browse_dir', { method: 'POST' });
-    if (r.path) $('#settingDir').value = r.path;
-  });
-  $('#migrateBtn').addEventListener('click', migrateStorage);
   $('#gotoSetupBtn').addEventListener('click', () => {
     $('#parseModal').style.display = 'none';
     $$('.nav-item[data-route]').forEach((b) => b.classList.remove('active'));
-    const settingsBtn = document.querySelector('.nav-item[data-route="settings"]');
-    settingsBtn?.classList.add('active');
-    $('#agentPanel').style.display = 'none';
+    document.querySelector('.nav-item[data-route="settings"]')?.classList.add('active');
     $('#settingsPanel').style.display = 'flex';
     loadSettings();
   });
+  $('#parseCloseBtn').addEventListener('click', () => { $('#parseModal').style.display = 'none'; });
+  $('#doneCloseBtn').addEventListener('click', () => { $('#parseModal').style.display = 'none'; });
+  $('#settingsCloseBtn').addEventListener('click', () => { $('#settingsPanel').style.display = 'none'; resetRoute(); });
+  $('#agentCloseBtn').addEventListener('click', () => { $('#agentPanel').style.display = 'none'; resetRoute(); });
+  $('#cleanupCloseBtn').addEventListener('click', () => { $('#cleanupPanel').style.display = 'none'; resetRoute(); });
+  $('#guideCloseBtn').addEventListener('click', () => { $('#guidePanel').style.display = 'none'; resetRoute(); });
 
   const doSearch = debounce(() => {
     state.search = $('#searchInput').value.trim();
@@ -786,9 +689,9 @@ function bindEvents() {
     loadMails();
   });
 
-  $$('.tab').forEach((t) => t.addEventListener('click', () => {
-    if (t.style.display === 'none') return;
-    state.currentView = t.dataset.view;
+  $$('.tab').forEach((tb) => tb.addEventListener('click', () => {
+    if (tb.style.display === 'none') return;
+    state.currentView = tb.dataset.view;
     renderBody();
   }));
 
@@ -798,20 +701,54 @@ function bindEvents() {
     let text = '';
     if (state.currentView === 'md') text = mail.body_md;
     else if (state.currentView === 'text') text = mail.body_text;
-    else if (state.currentView === 'atts') {
-      text = mail.attachment_names.join('\n');
-    } else text = mail.body_html || mail.body_text;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast('已复制到剪贴板');
-    } catch {
-      toast('复制失败');
-    }
+    else if (state.currentView === 'atts') text = mail.attachment_names.join('\n');
+    else text = mail.body_html || mail.body_text;
+    try { await navigator.clipboard.writeText(text); toast(t('copy.ok')); }
+    catch { toast(t('copy.fail')); }
   });
 
   $('#settingTheme').addEventListener('change', saveSettings);
   $('#settingAccent').addEventListener('change', saveSettings);
   $('#settingBrowser').addEventListener('change', saveSettings);
+  $('#settingLang').addEventListener('change', async (e) => {
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ lang: e.target.value }) });
+    location.reload();
+  });
+
+  $('#browseDataDirBtn').addEventListener('click', async () => {
+    const r = await api('/api/browse_dir', { method: 'POST' });
+    if (r.path) $('#settingDataDir').value = r.path;
+  });
+  $('#browseExportDirBtn').addEventListener('click', async () => {
+    const r = await api('/api/browse_dir', { method: 'POST' });
+    if (r.path) $('#settingDir').value = r.path;
+  });
+  $('#migrateBtn').addEventListener('click', migrateStorage);
+
+  $('#cleanupFindBtn').addEventListener('click', findCleanup);
+  $('#cleanupResetBtn').addEventListener('click', () => {
+    ['cfSender', 'cfSubject', 'cfDateFrom', 'cfDateTo', 'cfMinMb', 'cfMaxMb'].forEach((id) => { $('#' + id).value = ''; });
+  });
+  $('#cleanupDelBtn').addEventListener('click', deleteCleanup);
+
+  $('#copyPromptBtn').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('#agentPrompt').textContent); toast(t('agent.copy.ok')); }
+    catch { toast(t('copy.fail')); }
+  });
+  $('#copyKeyBtn').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('#agentKey').textContent); toast(t('copy.ok')); }
+    catch { toast(t('copy.fail')); }
+  });
+  $('#regenKeyBtn').addEventListener('click', async () => {
+    if (!confirm(t('agent.regen.confirm'))) return;
+    const r = await api('/api/agent-key/regenerate', { method: 'POST' });
+    $('#agentKey').textContent = r.api_key;
+    toast(t('agent.regen.ok'));
+  });
+}
+
+function resetRoute() {
+  $$('.nav-item[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === 'mails'));
 }
 
 async function loadSettings() {
@@ -820,51 +757,51 @@ async function loadSettings() {
   $('#settingTheme').value = cfg.theme;
   $('#settingAccent').value = cfg.accent_color;
   $('#settingBrowser').value = cfg.browser;
+  $('#settingLang').value = cfg.lang || 'zh-CN';
   try {
     const p = await api('/api/paths');
     $('#settingDataDir').value = p.data_dir;
     $('#settingDir').value = p.export_dir;
-    $('#dataSizeLabel').textContent = `（${fmtSize(p.data_size)}）`;
-    $('#exportSizeLabel').textContent = `（${fmtSize(p.export_size)}）`;
+    $('#dataSizeLabel').textContent = `(${fmtSize(p.data_size)})`;
+    $('#exportSizeLabel').textContent = `(${fmtSize(p.export_size)})`;
     state.exportConfigured = !!p.export_configured;
-    // 未配置导出目录时给出显性提示（首次使用引导）
-    $('#migrateNote').textContent = p.export_configured
-      ? '两个位置修改后点「迁移到新位置」：数据库在线复制并即时生效（旧库自动清理）；导出目录后台复制（带进度），完成后自动切换并删除旧目录。此后所有导入的转换文件均存到导出目录。'
-      : '尚未设置导出目录——设置并迁移完成后才能开始导入。';
+    $('#migrateNote').textContent = p.export_configured ? t('set.migrate.note.ok') : t('set.migrate.note.cfg');
   } catch {}
 }
 
 async function saveSettings() {
-  const cfg = {
-    theme: $('#settingTheme').value,
-    accent_color: $('#settingAccent').value,
-    browser: $('#settingBrowser').value,
-  };
-  applyTheme(cfg.theme, cfg.accent_color);
-  await api('/api/settings', { method: 'PUT', body: JSON.stringify(cfg) });
-  toast('设置已保存');
+  await api('/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify({
+      theme: $('#settingTheme').value,
+      accent_color: $('#settingAccent').value,
+      browser: $('#settingBrowser').value,
+    }),
+  });
+  toast(t('set.saved'));
 }
 
-async function migrateStorage() {  const dataDir = $('#settingDataDir').value.trim();
+async function migrateStorage() {
+  const dataDir = $('#settingDataDir').value.trim();
   const exportDir = $('#settingDir').value.trim();
+  const cur = await api('/api/paths');
   const body = {};
-  if (exportDir && exportDir !== (await api('/api/paths')).export_dir) body.export_dir = exportDir;
-  if (dataDir && dataDir !== (await api('/api/paths')).data_dir) body.data_dir = dataDir;
-  if (!Object.keys(body).length) { toast('路径未变化，无需迁移'); return; }
+  if (exportDir && exportDir !== cur.export_dir) body.export_dir = exportDir;
+  if (dataDir && dataDir !== cur.data_dir) body.data_dir = dataDir;
+  if (!Object.keys(body).length) { toast(t('set.unchanged')); return; }
 
   const bar = $('#migrateProgressBar');
   const fill = $('#migrateProgressFill');
   $('#migrateBtn').disabled = true;
   try {
     const r = await api('/api/migrate', { method: 'POST', body: JSON.stringify(body) });
-    await refreshExportConfigured();
     let needWait = false;
     if (r.data_dir) {
       if (r.data_dir.status === 'switched') {
-        toast('存档数据库已切换到新位置，立即生效');
-        $('#migrateNote').textContent = '数据库已迁移并即时生效。';
+        toast(t('set.data.switched'));
+        $('#migrateNote').textContent = t('set.data.switched');
       } else {
-        $('#migrateNote').textContent = '数据库已复制，重启软件后生效。';
+        $('#migrateNote').textContent = t('set.data.copied');
         needWait = true;
       }
     }
@@ -873,31 +810,43 @@ async function migrateStorage() {  const dataDir = $('#settingDataDir').value.tr
       bar.style.display = 'block';
       const tid = r.export_dir.task_id;
       const timer = setInterval(async () => {
-        const s = await api(`/api/migrate/status/${tid}`);
-        const pct = s.total ? Math.round((s.copied / s.total) * 100) : 0;
+        const ms = await api(`/api/migrate/status/${tid}`);
+        const pct = ms.total ? Math.round((ms.copied / ms.total) * 100) : 0;
         fill.style.width = `${pct}%`;
-        if (s.status === 'done') {
+        if (ms.status === 'done') {
           clearInterval(timer);
           bar.style.display = 'none';
           $('#migrateBtn').disabled = false;
-          toast(`导出目录已迁移（${s.total} 个文件），立即生效`);
+          toast(t('set.exp.moved', { n: ms.total }));
           loadSettings();
-        } else if (s.status === 'error') {
+        } else if (ms.status === 'error') {
           clearInterval(timer);
           bar.style.display = 'none';
           $('#migrateBtn').disabled = false;
-          toast(`迁移失败：${s.error}`);
+          toast(t('set.migrate.fail', { msg: ms.error }));
         }
       }, 800);
-    } else if (!r.export_dir && r.export_dir?.status === 'switched') {
-      toast('导出目录已切换，立即生效');
+    } else if (!r.data_dir) {
+      $('#migrateBtn').disabled = false;
     }
-    if (!needWait) $('#migrateBtn').disabled = false;
-    loadSettings();
+    if (r.export_dir && r.export_dir.status === 'switched') {
+      toast(t('set.exp.switched'));
+      $('#migrateBtn').disabled = false;
+      await refreshExportConfigured();
+    }
   } catch (e) {
-    toast(`迁移失败：${e.message}`);
+    toast(t('set.migrate.fail', { msg: e.message }));
     $('#migrateBtn').disabled = false;
   }
+}
+
+/* ── Agent 接入 ───────────────────────────────────────── */
+async function loadAgentKey() {
+  const k = await api('/api/agent-key');
+  const base = `http://127.0.0.1:${k.port}`;
+  $('#agentKey').textContent = k.api_key;
+  $('#agentStats').textContent = t('agent.stats', { n: k.emails, a: k.archives, base });
+  $('#agentPrompt').textContent = t('agent.prompt', { base, key: k.api_key });
 }
 
 /* ── 查找清理 ─────────────────────────────────────────── */
@@ -915,11 +864,12 @@ async function findCleanup() {
   };
   if (!body.sender && !body.subject && !body.date_from && !body.date_to
       && body.min_mb == null && body.max_mb == null) {
-    toast('至少填一个条件再查找'); return;
+    toast(t('cleanup.needCond'));
+    return;
   }
   const btn = $('#cleanupFindBtn');
   btn.disabled = true;
-  btn.textContent = '查找中…';
+  btn.textContent = t('cleanup.finding');
   $('#cleanupSummary').style.display = 'none';
   $('#cleanupResults').style.display = 'none';
   $('#cleanupActions').style.display = 'none';
@@ -927,26 +877,27 @@ async function findCleanup() {
     const r = await api('/api/mail-cleanup/find', { method: 'POST', body: JSON.stringify(body) });
     cleanupItems = r.items;
     cleanupSel = new Set();
-    $('#cleanupSummary').style.display = 'block';
-    $('#cleanupSummary').innerHTML = r.total
-      ? `找到 <strong class="num">${r.total}</strong> 封 · 转换文件共占 ${fmtSize(r.total_export_bytes)}`
-      : '没有符合条件的邮件';
+    const sum = $('#cleanupSummary');
+    sum.style.display = 'block';
+    sum.innerHTML = r.total
+      ? `${t('cleanup.found', { n: r.total }).split('·')[0].trim()} · ${t('cleanup.occ', { size: fmtSize(r.total_export_bytes) })}`
+      : t('cleanup.none');
     renderCleanupResults(r.total);
   } catch (e) {
-    toast(`查找失败：${e.message}`);
+    toast(t('cleanup.findFail', { msg: e.message }));
   }
   btn.disabled = false;
-  btn.textContent = '查 找';
+  btn.textContent = t('cleanup.find');
 }
 
 function renderCleanupResults(totalFound) {
   const box = $('#cleanupResults');
-  $('#cleanupResults').style.display = 'block';
+  box.style.display = 'block';
   $('#cleanupActions').style.display = totalFound ? 'block' : 'none';
   $('#cleanupDelBtn').disabled = true;
   if (!totalFound) { box.innerHTML = ''; return; }
   box.innerHTML = `
-    <label class="cleanup-selectall"><input type="checkbox" id="cleanupAll"> 全选</label>
+    <label class="cleanup-selectall"><input type="checkbox" id="cleanupAll"><span data-i18n="cleanup.selectall">${t('cleanup.selectall')}</span></label>
     ${cleanupItems.map((m) => `
       <label class="cleanup-row">
         <input type="checkbox" data-id="${m.id}">
@@ -957,11 +908,9 @@ function renderCleanupResults(totalFound) {
         <span class="cr-size num">${fmtSize(m.export_size)}</span>
       </label>`).join('')}`;
   const refresh = () => {
-    cleanupSel = new Set(
-      [...box.querySelectorAll('input[data-id]:checked')].map((c) => +c.dataset.id));
+    cleanupSel = new Set([...box.querySelectorAll('input[data-id]:checked')].map((c) => +c.dataset.id));
     $('#cleanupDelBtn').disabled = !cleanupSel.size;
-    $('#cleanupDelBtn').textContent = cleanupSel.size
-      ? `删除选中（${cleanupSel.size} 封）` : '删除选中';
+    $('#cleanupDelBtn').textContent = t('cleanup.del.n', { n: cleanupSel.size });
   };
   box.querySelectorAll('input[data-id]').forEach((c) => c.addEventListener('change', refresh));
   $('#cleanupAll').addEventListener('change', (e) => {
@@ -975,81 +924,70 @@ async function deleteCleanup() {
   const ids = [...cleanupSel];
   if (!ids.length) return;
   const mode = document.querySelector('input[name="delMode"]:checked')?.value || 'full';
-  const modeText = mode === 'full'
-    ? `彻底删除 ${ids.length} 封（含 MD/纯文本/附件文件，不可恢复）`
-    : `仅把 ${ids.length} 封从列表移出（文件保留）`;
-  if (!confirm(`确认${modeText}？`)) return;
+  if (!confirm(t('cleanup.confirm.' + mode, { n: ids.length }))) return;
   try {
-    const r = await api('/api/mail-cleanup/delete', {
-      method: 'POST',
-      body: JSON.stringify({ ids, mode }),
-    });
+    const r = await api('/api/mail-cleanup/delete', { method: 'POST', body: JSON.stringify({ ids, mode }) });
     toast(mode === 'full'
-      ? `已删除 ${r.deleted} 封，释放 ${fmtSize(r.freed_bytes)}`
-      : `已移出 ${r.deleted} 封`);
+      ? t('cleanup.deleted.full', { n: r.deleted, size: fmtSize(r.freed_bytes) })
+      : t('cleanup.deleted.index', { n: r.deleted }));
     cleanupSel = new Set();
     findCleanup();
     loadArchives();
     loadMails();
   } catch (e) {
-    toast(`删除失败：${e.message}`);
+    toast(t('cleanup.delFail', { msg: e.message }));
   }
 }
 
-/* ── Agent 接入 ───────────────────────────────────────── */
-async function loadAgentKey() {  const k = await api('/api/agent-key');
-  const base = `http://127.0.0.1:${k.port}`;
-  $('#agentKey').textContent = k.api_key;
-  $('#agentStats').textContent = `已导入 ${k.emails} 封 · ${k.archives} 个存档 · 服务地址 ${base}`;
-  $('#agentPrompt').textContent =
-`请安装 fox-converter 技能
-下载地址：${base}/skill/download
-API Key：${k.api_key}
-安装说明：下载 zip 并解压到你的技能目录（如 ~/.claude/skills/ 或 openclaw 的 skills 目录），读取其中的 SKILL.md 并按其说明，通过 HTTP 访问我本地的 Fox Converter 邮件存档：
-- 服务地址：${base}
-- 请求头：X-API-Key: ${k.api_key}
-安装完成后，用"搜索邮件"接口列出我最近的 3 封邮件，确认技能可用。`;
-}
+/* ── Agent 接入页加载 ─────────────────────────────────── */
+async function loadAgentKeyOld() {}
 
-/* ── 启动 ─────────────────────────────────────────────── */
 window.addEventListener('unhandledrejection', (e) => {
   console.error('[fox-converter]', e.reason);
-  toast(`操作失败：${e.reason?.message || e.reason}`);
+  toast(t('op.fail', { msg: e.reason?.message || e.reason }));
 });
+
+async function refreshExportConfigured() {
+  try {
+    const p = await api('/api/paths');
+    state.exportConfigured = !!p.export_configured;
+  } catch {}
+  return state.exportConfigured;
+}
 
 async function init() {
   bindEvents();
-  // 探活：服务未运行时显示明确横幅（页面可能是残留标签）
-  try {
-    await api('/api/health');
-  } catch {
-    $('#offlineBanner').style.display = 'flex';
-  }
-  $('#reconnectBtn').addEventListener('click', () => location.reload());
+  let lang = 'zh-CN';
   try {
     const cfg = await api('/api/settings');
+    lang = cfg.lang || 'zh-CN';
     applyTheme(cfg.theme, cfg.accent_color);
     $('#settingTheme').value = cfg.theme;
     $('#settingAccent').value = cfg.accent_color;
     $('#settingBrowser').value = cfg.browser;
+    $('#settingLang').value = lang;
   } catch (e) {
-    console.error('设置加载失败', e);
+    console.error('settings', e);
   }
+  applyLang(lang);
+
+  try { await api('/api/health'); }
+  catch { $('#offlineBanner').style.display = 'flex'; }
+
   try {
     await loadArchives();
     await loadMails();
   } catch (e) {
-    console.error('初始化加载失败', e);
-    toast(`加载失败：${e.message}`);
+    console.error('init', e);
+    toast(t('load.fail', { msg: e.message }));
   }
-  // 首次使用引导：导出目录未设置 → 自动打开设置页
+
   if ((await refreshExportConfigured()) === false) {
     $$('.nav-item[data-route]').forEach((b) => b.classList.remove('active'));
     document.querySelector('.nav-item[data-route="settings"]')?.classList.add('active');
-    $('#agentPanel').style.display = 'none';
     $('#settingsPanel').style.display = 'flex';
     await loadSettings();
-    toast('首次使用：请先设置存储位置，再导入存档');
+    toast(t('firstrun'));
   }
 }
 

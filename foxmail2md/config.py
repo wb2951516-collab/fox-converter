@@ -12,6 +12,7 @@ DEFAULT_CONFIG = {
     'export_dir': '',
     'data_dir': '',
     'port': 8732,
+    'lang': 'zh-CN',
     'last_source': '',
     'api_key': '',
 }
