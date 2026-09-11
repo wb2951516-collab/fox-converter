@@ -33,7 +33,7 @@ Fox Converter 在本地把 .fox 拆开——里面其实是标准的邮件数据
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/wb2951516-collab/fox-converter/releases) 下载 `FoxConverter_Setup.exe` 安装（无需管理员权限）
+1. 从 [Releases](https://github.com/wb2951516-collab/fox-converter/releases) 下载 `FoxConverter_Setup_v2.3.0.exe` 安装（无需管理员权限）
 2. 首次打开：按引导把存储位置设到空间够的盘（不设置无法导入）
 3. 点「导入 .fox 文件」，选择存档，等待转换完成
 4. 开始阅读、搜索，或把导出目录接入你的 AI 工具
@@ -115,7 +115,7 @@ Foxmail's archive feature (.fox files) is a closed format with no official expor
 
 ### Quick start
 
-Download `FoxConverter_Setup.exe` from [Releases](https://github.com/wb2951516-collab/fox-converter/releases), install (no admin required), point the storage location to a roomy drive, and import your `.fox` archives. A sample archive ([examples/demo.fox](examples/demo.fox), 3 fictional emails) is included for a quick tour.
+Download `FoxConverter_Setup_v2.3.0.exe` from [Releases](https://github.com/wb2951516-collab/fox-converter/releases), install (no admin required), point the storage location to a roomy drive, and import your `.fox` archives. A sample archive ([examples/demo.fox](examples/demo.fox), 3 fictional emails) is included for a quick tour.
 
 ### How it works
 

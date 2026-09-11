@@ -36,8 +36,13 @@ r2 = subprocess.run(['netstat', '-ano'], capture_output=True, text=True)
 busy = any(':8732' in line and 'LISTENING' in line for line in r2.stdout.splitlines())
 print(f'  {"✓ 端口 8732 空闲" if not busy else "✗ 端口 8732 被占用"}')
 
-setup = Path(r'D:\AI-coding\Project_pending_iteration\Foxmail存档文件转换MD工具\installer\build\FoxConverter_Setup_v2.1.1.exe')
-print(f'  {"✓ 新安装包就绪" if setup.exists() else "✗ 安装包缺失"}  ({setup.name}, {setup.stat().st_size/1024/1024:.0f}MB)' if setup.exists() else '')
+build_dir = Path(__file__).resolve().parent.parent / 'installer' / 'build'
+setups = sorted(build_dir.glob('FoxConverter_Setup_v*.exe'), key=lambda p: p.stat().st_mtime)
+if setups:
+    setup = setups[-1]
+    print(f'  ✓ 新安装包就绪  ({setup.name}, {setup.stat().st_size/1024/1024:.0f}MB)')
+else:
+    print('  ✗ 安装包缺失')
 
 print()
 print('=== 环境已完全干净，可安装测试 ===' if clean and n == 0 and not busy else '=== 仍有残留，见上 ===')

@@ -1,5 +1,7 @@
 # 用户数据与涉密内容（绝不入库）
+# examples/demo.fox 为虚构演示数据，唯一例外
 *.fox
+!examples/demo.fox
 output*/
 *.db
 *.db-shm
@@ -20,9 +22,3 @@ openspec/
 .zcode/
 __pycache__/
 *.pyc
-
-# >>> Comet managed project state >>>
-!/.comet/
-/.comet/*
-!/.comet/config.yaml
-# <<< Comet managed project state <<<
