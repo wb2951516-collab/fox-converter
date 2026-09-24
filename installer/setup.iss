@@ -2,7 +2,7 @@
 ; 用法: ISCC.exe installer\setup.iss
 
 #define MyAppName "Fox Converter"
-#define MyAppVersion "2.3.0"
+#define MyAppVersion "2.3.1"
 #define MyAppPublisher "Fox Converter"
 #define MyAppExeName "FoxConverter.exe"
 

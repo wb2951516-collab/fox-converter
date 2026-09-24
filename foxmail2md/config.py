@@ -24,15 +24,25 @@ CONFIG_DIR = (Path(_CONFIG_DIR_OVERRIDE) if _CONFIG_DIR_OVERRIDE
               else Path(os.environ.get('APPDATA', str(Path.home()))) / 'foxmail2md')
 CONFIG_PATH = CONFIG_DIR / 'config.json'
 
+# 中间件每个请求都会读配置：按 mtime 缓存，避免每请求同步读盘
+_cache = {'mtime': None, 'cfg': None}
+
 
 def load_config() -> dict:
-    if CONFIG_PATH.exists():
-        try:
-            cfg = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
-            return {**DEFAULT_CONFIG, **cfg}
-        except Exception:
-            pass
-    return dict(DEFAULT_CONFIG)
+    try:
+        mtime = CONFIG_PATH.stat().st_mtime_ns
+    except OSError:
+        mtime = None
+    if _cache['cfg'] is None or _cache['mtime'] != mtime:
+        cfg = None
+        if CONFIG_PATH.exists():
+            try:
+                cfg = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
+            except Exception:
+                cfg = None
+        _cache['cfg'] = {**DEFAULT_CONFIG, **cfg} if cfg else dict(DEFAULT_CONFIG)
+        _cache['mtime'] = mtime
+    return dict(_cache['cfg'])
 
 
 def save_config(cfg: dict):
@@ -41,6 +51,7 @@ def save_config(cfg: dict):
     CONFIG_PATH.write_text(
         json.dumps(merged, ensure_ascii=False, indent=2), encoding='utf-8'
     )
+    _cache['mtime'] = None  # 下次 load 重新读盘
 
 
 def get_data_dir(cfg: dict = None) -> Path:

@@ -139,86 +139,139 @@ function addrKey(s) {
 }
 
 /* ── 邮件列表 ─────────────────────────────────────────── */
+let loadSeq = 0;          // 请求序号：过期响应不渲染（防慢响应覆盖新结果）
+let loadAbort = null;     // 连打搜索时中止在途请求
+const groupCache = new Map();  // 分组 key → 成员列表（作用域变化时清空）
+
+function clearGroupCache() { groupCache.clear(); }
+
+function mailItemHtml(m) {
+  const attSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.5 3.5 0 015 5L10.5 19a2 2 0 01-3-3l6.5-6.5"/></svg>';
+  return `
+    <button class="mail-item ${m.id === state.selectedId ? 'selected' : ''}" data-id="${m.id}" aria-label="${esc(m.subject)}">
+      <div class="mail-item-top">
+        <span class="mail-from">${esc(m.from)}</span>
+        <span class="mail-date">${fmtDate(m.date)}</span>
+      </div>
+      <div class="mail-subject">${esc(m.subject)}</div>
+      ${m.has_attachments ? `<div class="mail-att-badge">${attSvg}${m.attachment_count}</div>` : ''}
+    </button>`;
+}
+
 async function loadMails() {
-  const grouped = !!state.group;
-  const params = new URLSearchParams({
-    page: grouped ? 1 : state.page,
-    per_page: grouped ? 2000 : state.perPage,
-    search: state.search,
-    order: state.order,
-  });
+  const seq = ++loadSeq;
+  if (loadAbort) loadAbort.abort();
+  const ac = new AbortController();
+  loadAbort = ac;
+  const params = new URLSearchParams({ search: state.search, order: state.order });
   if (state.archiveId) params.set('archive_id', state.archiveId);
-  const data = await api(`/api/mails?${params}`);
+  let data;
+  try {
+    if (state.group) {
+      params.set('group', state.group);
+      data = await api(`/api/mails?${params}`, { signal: ac.signal });
+    } else {
+      params.set('page', state.page);
+      params.set('per_page', state.perPage);
+      data = await api(`/api/mails?${params}`, { signal: ac.signal });
+    }
+  } catch (e) {
+    if (ac.signal.aborted) return;  // 已被更新的请求取代
+    throw e;
+  }
+  if (seq !== loadSeq) return;
   state.total = data.total;
-  if (grouped) {
-    renderGroupedMails(data.items);
-    $('#listFooter').innerHTML = `<span class="num">${t('cleanup.found', { n: data.items.length, size: '' }).split('·')[0].trim()} · ${groupsLabel()}</span>`;
+  if (state.group) {
+    renderGroupHeaders(data.groups || []);
+    $('#listFooter').innerHTML =
+      `<span class="num">${t('list.groups', { n: (data.groups || []).length, m: data.total })}</span>`;
   } else {
     renderMailList(data.items);
     renderPagination();
   }
-  await renderStats();
 }
 
 function groupsLabel() {
   return { subject: t('grouped.subject'), from: t('grouped.from'), to: t('grouped.to') }[state.group] || '';
 }
 
-function renderGroupedMails(items) {
+function displayGroupKey(key) {
+  if (key) return key;
+  return state.group === 'subject' ? normSubject('') : addrKey('');
+}
+
+function renderGroupHeaders(groups) {
   const box = $('#mailList');
-  if (!items.length) {
+  if (!groups.length) {
     box.innerHTML = `<div class="empty-state"><p>${state.search ? t('empty.nomatch') : t('empty.list')}</p></div>`;
     return;
   }
-  const keyOf = (m) => {
-    if (state.group === 'subject') return normSubject(m.subject);
-    if (state.group === 'from') return addrKey(m.from);
-    if (state.group === 'to') return addrKey(m.to);
-    return '';
-  };
-  const groups = new Map();
-  for (const m of items) {
-    const k = keyOf(m);
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(m);
-  }
-  const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-  const attSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.5 3.5 0 015 5L10.5 19a2 2 0 01-3-3l6.5-6.5"/></svg>';
-  const itemHtml = (m) => `
-    <button class="mail-item ${m.id === state.selectedId ? 'selected' : ''}" data-id="${m.id}" aria-label="${esc(m.subject)}">
-      <div class="mail-item-top">
-        <span class="mail-from">${state.group === 'from' ? esc(normSubject(m.subject)) : esc(m.from)}</span>
-        <span class="mail-date">${fmtDate(m.date)}</span>
-      </div>
-      ${state.group === 'from' ? '' : `<div class="mail-subject">${esc(m.subject)}</div>`}
-      ${m.has_attachments ? `<div class="mail-att-badge">${attSvg}${m.attachment_count}</div>` : ''}
-    </button>`;
-  box.innerHTML = sorted.map(([key, mails], gi) => {
-    const open = state.expandedGroups.has(key) || gi === 0;
+  box.innerHTML = groups.map((g, gi) => {
+    const open = state.expandedGroups.has(g.key) || gi === 0;
     return `
-      <div class="group-block">
-        <button class="group-header" data-key="${esc(key)}" aria-expanded="${open}">
+      <div class="group-block" data-key="${esc(g.key)}">
+        <button class="group-header" aria-expanded="${open}">
           <svg class="icon chev ${open ? 'open' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 18l6-6-6-6"/></svg>
-          <span class="group-name" title="${esc(key)}">${esc(key)}</span>
-          <span class="group-count num">${mails.length}</span>
+          <span class="group-name" title="${esc(displayGroupKey(g.key))}">${esc(displayGroupKey(g.key))}</span>
+          <span class="group-count num">${g.count}</span>
         </button>
-        <div class="group-body" style="display:${open ? 'block' : 'none'}">
-          ${mails.map(itemHtml).join('')}
-        </div>
+        <div class="group-body" style="display:${open ? 'block' : 'none'}"></div>
       </div>`;
   }).join('');
-  box.querySelectorAll('.group-header').forEach((h) => {
-    h.addEventListener('click', () => {
-      const key = h.dataset.key;
-      const grpBody = h.nextElementSibling;
-      const open = grpBody.style.display === 'none';
-      grpBody.style.display = open ? 'block' : 'none';
-      h.setAttribute('aria-expanded', String(open));
-      h.querySelector('.chev')?.classList.toggle('open', open);
-      if (open) state.expandedGroups.add(key); else state.expandedGroups.delete(key);
-    });
+  box.querySelectorAll('.group-block').forEach((block, gi) => {
+    const header = block.querySelector('.group-header');
+    header.addEventListener('click', () => toggleGroupBlock(block));
+    if (gi === 0) loadGroupMembers(block);  // 首组自动展开
   });
-  box.querySelectorAll('.mail-item').forEach((el) => {
+}
+
+async function toggleGroupBlock(block) {
+  const header = block.querySelector('.group-header');
+  const grpBody = block.querySelector('.group-body');
+  const key = block.dataset.key;
+  const opening = grpBody.style.display === 'none';
+  grpBody.style.display = opening ? 'block' : 'none';
+  header.setAttribute('aria-expanded', String(opening));
+  header.querySelector('.chev')?.classList.toggle('open', opening);
+  if (opening) {
+    state.expandedGroups.add(key);
+    await loadGroupMembers(block);
+  } else {
+    state.expandedGroups.delete(key);
+  }
+}
+
+async function loadGroupMembers(block) {
+  const grpBody = block.querySelector('.group-body');
+  if (block.dataset.loaded === '1') return;  // 本次视图内已加载
+  const key = block.dataset.key;
+  if (groupCache.has(key)) {
+    fillGroupBody(grpBody, groupCache.get(key));
+    block.dataset.loaded = '1';
+    return;
+  }
+  const params = new URLSearchParams({
+    group: state.group, key, search: state.search,
+    order: state.order, per_page: 2000,
+  });
+  if (state.archiveId) params.set('archive_id', state.archiveId);
+  try {
+    const data = await api(`/api/mails/group_members?${params}`);
+    groupCache.set(key, data.items);
+    fillGroupBody(grpBody, data.items);
+    block.dataset.loaded = '1';
+  } catch (e) {
+    grpBody.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
+  }
+}
+
+function fillGroupBody(grpBody, items) {
+  if (!items.length) {
+    grpBody.innerHTML = `<div class="empty-state"><p>${t('empty.nomatch')}</p></div>`;
+    return;
+  }
+  grpBody.innerHTML = items.map(mailItemHtml).join('');
+  grpBody.querySelectorAll('.mail-item').forEach((el) => {
     el.addEventListener('click', () => selectMail(+el.dataset.id));
   });
 }
@@ -229,16 +282,7 @@ function renderMailList(items) {
     box.innerHTML = `<div class="empty-state"><p>${state.search ? t('empty.nomatch') : t('empty.list')}</p></div>`;
     return;
   }
-  const attSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.5 3.5 0 015 5L10.5 19a2 2 0 01-3-3l6.5-6.5"/></svg>';
-  box.innerHTML = items.map((m) => `
-    <button class="mail-item ${m.id === state.selectedId ? 'selected' : ''}" data-id="${m.id}" aria-label="${esc(m.subject)}">
-      <div class="mail-item-top">
-        <span class="mail-from">${esc(m.from)}</span>
-        <span class="mail-date">${fmtDate(m.date)}</span>
-      </div>
-      <div class="mail-subject">${esc(m.subject)}</div>
-      ${m.has_attachments ? `<div class="mail-att-badge">${attSvg}${m.attachment_count}</div>` : ''}
-    </button>`).join('');
+  box.innerHTML = items.map(mailItemHtml).join('');
   box.querySelectorAll('.mail-item').forEach((el) => {
     el.addEventListener('click', () => selectMail(+el.dataset.id));
   });
@@ -307,8 +351,10 @@ async function loadArchives() {
       state.page = 1;
       state.search = '';
       $('#searchInput').value = '';
+      clearGroupCache();
       loadMails();
       loadArchives();
+      renderStats();
     });
   });
   box.querySelectorAll('.archive-del').forEach((el) => {
@@ -326,8 +372,10 @@ async function requestDeleteArchive(id) {
     await api(`/api/archives/${id}`, { method: 'DELETE' });
     toast(t('cleanup.deleted.arc'));
     if (state.archiveId === id) state.archiveId = 0;
+    clearGroupCache();
     loadArchives();
     loadMails();
+    renderStats();
   } else {
     state.confirmDeleteId = id;
     const btn = document.querySelector(`.archive-del[data-del="${id}"]`);
@@ -387,6 +435,8 @@ function renderBody() {
     body.querySelectorAll('[data-att-index]').forEach((el) => {
       el.addEventListener('click', () => triggerDownload(mail, +el.dataset.attIndex));
     });
+    const dlAll = body.querySelector('#dlAllBtn');
+    if (dlAll) dlAll.addEventListener('click', () => triggerDownloadAll(mail));
   }
   body.scrollTop = 0;
 }
@@ -412,6 +462,12 @@ function renderAttachmentsView(mail) {
     <div class="reader-content atts-view">
       <div class="atts-title">${t('atts.count', { n: mail.attachment_names.length })}</div>
       <div class="atts-list">${rows}</div>
+      <div style="margin-top:12px">
+        <button class="btn btn-sm" id="dlAllBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          ${t('atts.downloadAll')}
+        </button>
+      </div>
     </div>`;
 }
 
@@ -425,6 +481,16 @@ function triggerDownload(mail, i) {
   a.click();
   a.remove();
   toast(t('atts.dlStart', { name: mail.attachment_names[i] }));
+}
+
+function triggerDownloadAll(mail) {
+  const a = document.createElement('a');
+  a.href = `/api/mails/${mail.id}/attachments/zip`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  toast(t('atts.dlAllStart'));
 }
 
 /* 防 XSS + 内嵌图片改为 API 路径 */
@@ -624,8 +690,10 @@ function listenProgress(taskId) {
       state.page = 1;
       state.search = '';
       $('#searchInput').value = '';
+      clearGroupCache();
       loadArchives();
       loadMails();
+      renderStats();
     } else if (d.status === 'error') {
       es.close();
       toast(t('import.parseFail', { msg: d.error }));
@@ -675,17 +743,20 @@ function bindEvents() {
   const doSearch = debounce(() => {
     state.search = $('#searchInput').value.trim();
     state.page = 1;
+    clearGroupCache();
     loadMails();
   }, 350);
   $('#searchInput').addEventListener('input', doSearch);
   $('#sortSelect').addEventListener('change', (e) => {
     state.order = e.target.value;
     state.page = 1;
+    clearGroupCache();
     loadMails();
   });
   $('#groupSelect').addEventListener('change', (e) => {
     state.group = e.target.value;
     state.page = 1;
+    clearGroupCache();
     loadMails();
   });
 
@@ -931,9 +1002,11 @@ async function deleteCleanup() {
       ? t('cleanup.deleted.full', { n: r.deleted, size: fmtSize(r.freed_bytes) })
       : t('cleanup.deleted.index', { n: r.deleted }));
     cleanupSel = new Set();
+    clearGroupCache();
     findCleanup();
     loadArchives();
     loadMails();
+    renderStats();
   } catch (e) {
     toast(t('cleanup.delFail', { msg: e.message }));
   }
@@ -953,6 +1026,21 @@ async function refreshExportConfigured() {
     state.exportConfigured = !!p.export_configured;
   } catch {}
   return state.exportConfigured;
+}
+
+async function pollMigration() {
+  try {
+    const s = await api('/api/migration/status');
+    if (s.status !== 'running') return;
+    toast(t('idx.building'));
+    const timer = setInterval(async () => {
+      try {
+        const st = await api('/api/migration/status');
+        if (st.status === 'done') { clearInterval(timer); toast(t('idx.done')); }
+        else if (st.status !== 'running') clearInterval(timer);
+      } catch { clearInterval(timer); }
+    }, 2000);
+  } catch {}
 }
 
 async function init() {
@@ -977,10 +1065,12 @@ async function init() {
   try {
     await loadArchives();
     await loadMails();
+    renderStats();
   } catch (e) {
     console.error('init', e);
     toast(t('load.fail', { msg: e.message }));
   }
+  pollMigration();
 
   if ((await refreshExportConfigured()) === false) {
     $$('.nav-item[data-route]').forEach((b) => b.classList.remove('active'));

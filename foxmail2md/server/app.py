@@ -1,19 +1,24 @@
 # -*- coding: utf-8 -*-
 """FastAPI 服务：文件选择 / 解析进度 / 邮件列表搜索 / 附件下载 / 设置"""
 import asyncio
+import io
 import json
 import os
+import re
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from ..core import FoxArchive, count_emails, is_fox_file, parse_mail, export_mail
 from ..core.store import Store
@@ -24,6 +29,44 @@ from ..config import (load_config, save_config, get_export_dir, get_data_dir,
 app = FastAPI(title='Fox Converter')
 _tasks = {}  # task_id -> {status, progress, total, current_subject, error, source}
 _store = Store(get_db_path(load_config()))
+
+# 老库升级：后台分块回填分组键 + 构建 FTS trigram 索引；完成前搜索自动回退 LIKE
+_migration = {'status': 'idle', 'phase': '', 'done': 0, 'total': 0, 'error': ''}
+
+
+def _migration_worker():
+    try:
+        if _store.email_count() == 0:
+            _migration.update(status='done')
+            return
+        total = _store.email_count()
+        _migration.update(status='running', phase='prepare', total=total)
+        if not _store.fts_ready():
+            _store.fts_build_begin()
+        # 1) 分组键回填（快，秒级；分组接口在 norm 就绪前走前端兜底）
+        while True:
+            n = _store.backfill_norm_keys()
+            _migration['done'] += n
+            if n == 0:
+                break
+        # 2) FTS trigram 构建（慢，分块提交，可中断续跑）
+        _migration.update(phase='fts', done=0, total=total)
+        while True:
+            done, top = _store.fts_build_chunk()
+            _migration['done'] = top
+            if done:
+                break
+        _store.fts_build_finish()
+        _migration.update(status='done', done=total)
+    except Exception as e:
+        _migration.update(status='error', error=str(e))
+
+
+if not _store.fts_ready():
+    # 老库升级：后台分块回填分组键 + 重建 FTS（空库在 Store 初始化时已置就绪）
+    _migration.update(status='running', phase='prepare', total=_store.email_count())
+    threading.Thread(target=_migration_worker, daemon=True,
+                     name='fox2md-migration').start()
 
 WEB_DIR = Path(getattr(sys, '_MEIPASS', str(Path(__file__).resolve().parent.parent))) / 'web'
 SKILL_DIR = Path(getattr(sys, '_MEIPASS', str(Path(__file__).resolve().parent.parent))) / 'skill'
@@ -122,8 +165,8 @@ async def browse_folder():
 
 
 @app.get('/api/peek')
-async def peek_file(path: str = Query('')):
-    """校验手动输入的 .fox 路径并返回基本信息"""
+def peek_file(path: str = Query('')):
+    """校验手动输入的 .fox 路径并返回基本信息（同步磁盘 IO，走线程池）"""
     p = Path(path.strip().strip('"'))
     if not p.exists():
         raise HTTPException(404, '文件不存在')
@@ -133,7 +176,7 @@ async def peek_file(path: str = Query('')):
 
 
 @app.post('/api/diskcheck')
-async def disk_check(body: dict = Body(...)):
+def disk_check(body: dict = Body(...)):
     """检查导出盘剩余空间是否足够容纳所选存档的导出内容"""
     paths = body.get('paths') or []
     sizes, counts, total = {}, {}, 0
@@ -202,30 +245,34 @@ def _parse_worker(task_id: str, paths: list):
             task['total'] = total
             entries = []
             imported = skipped = errors = 0
-            for index, offset, raw in archive:
-                if task.get('cancelled'):
-                    break
-                mail = parse_mail(index, offset, raw)
+            file_known = []  # 本文件新增的 Message-ID；事务提交后才并入全局集合
+            with _store.transaction():
+                for index, offset, raw in archive:
+                    if task.get('cancelled'):
+                        break
+                    mail = parse_mail(index, offset, raw)
 
-                # 全局去重：其他存档已导入的邮件跳过
-                if mail.message_id in known_ids:
-                    skipped += 1
+                    # 全局去重：其他存档已导入的邮件跳过
+                    if mail.message_id in known_ids:
+                        skipped += 1
+                        task.update({'current': index + 1, 'subject': (mail.subject or '')[:40]})
+                        continue
+
+                    try:
+                        entry = export_mail(mail, export_dir, att_dir)
+                        entries.append(entry)
+                        all_files = entry['attachment_files'] + entry.get('inline_files', [])
+                        _store.insert_mail(source_name, mail, all_files, entry['md_file'],
+                                           archive_id=archive_id)
+                        file_known.append(mail.message_id)
+                        imported += 1
+                    except Exception:
+                        errors += 1
                     task.update({'current': index + 1, 'subject': (mail.subject or '')[:40]})
-                    continue
-
-                try:
-                    entry = export_mail(mail, export_dir, att_dir)
-                    entries.append(entry)
-                    all_files = entry['attachment_files'] + entry.get('inline_files', [])
-                    _store.insert_mail(source_name, mail, all_files, entry['md_file'],
-                                       archive_id=archive_id)
-                    known_ids.add(mail.message_id)
-                    imported += 1
-                except Exception:
-                    errors += 1
-                task.update({'current': index + 1, 'subject': (mail.subject or '')[:40]})
-                if index % 10 == 0:
-                    task['elapsed'] = time.time() - t0
+                    if index % 10 == 0:
+                        task['elapsed'] = time.time() - t0
+            # 整个 .fox 一个事务：到这一步才提交（崩溃/异常时整文件回滚）
+            known_ids.update(file_known)
 
             _store.update_archive_counts(archive_id, imported, skipped)
             from ..core.exporter import write_manifest
@@ -249,7 +296,7 @@ def _parse_worker(task_id: str, paths: list):
 
 
 @app.post('/api/parse')
-async def start_parse(body: dict = Body(...)):
+def start_parse(body: dict = Body(...)):
     """启动批量解析任务"""
     paths = body.get('paths') or ([body['path']] if body.get('path') else [])
     paths = [p.strip() for p in paths if p and Path(p.strip()).exists()]
@@ -339,13 +386,13 @@ async def parse_status_sse(task_id: str):
 
 # ── 邮件列表 / 详情 / 搜索 ───────────────────────────────────────────────────
 @app.get('/api/archives')
-async def list_archives():
+def list_archives():
     """已导入存档列表（含邮件数/占用空间），供侧栏管理与筛选"""
     return {'archives': _store.list_archives()}
 
 
 @app.delete('/api/archives/{archive_id}')
-async def delete_archive(archive_id: int):
+def delete_archive(archive_id: int):
     """删除存档：清数据库记录 + 删除其导出目录（MD/纯文本/附件）"""
     arc = _store.get_archive(archive_id)
     if not arc:
@@ -359,13 +406,21 @@ async def delete_archive(archive_id: int):
 
 
 @app.get('/api/sources')
-async def list_sources():
+def list_sources():
     return {'sources': _store.list_sources()}
 
 
 # ── 查找清理：按条件筛选已转换邮件并删除 ──────────────────────────────────────
-def _mail_export_files(mail: dict, export_dirs):
-    """收集一封邮件在磁盘上的全部导出文件（md/纯文本/附件），返回存在的路径列表"""
+def _mail_export_files(mail: dict, export_dirs) -> list:
+    """收集一封邮件在磁盘上的全部导出文件（md/纯文本/附件），返回存在的路径列表。
+
+    优先用该邮件所属存档的导出目录精确解析，找不到时兜底遍历所有存档目录。
+    """
+    dirs = []
+    own = mail.get('export_dir')
+    if own:
+        dirs.append(own)
+    dirs.extend(d for d in export_dirs if d != own)
     files = []
     md_rel = mail.get('md_file') or ''
     if md_rel:
@@ -375,7 +430,7 @@ def _mail_export_files(mail: dict, export_dirs):
     files.extend(mail.get('attachment_files') or [])
     out = []
     for rel in files:
-        for ed in export_dirs:
+        for ed in dirs:
             p = Path(ed) / rel
             if p.exists():
                 out.append(p)
@@ -383,15 +438,15 @@ def _mail_export_files(mail: dict, export_dirs):
     return out
 
 
-def _mail_export_size(mail: dict, export_dirs):
+def _mail_export_size(mail: dict, export_dirs) -> int:
     return sum(f.stat().st_size for f in _mail_export_files(mail, export_dirs))
 
 
 @app.post('/api/mail-cleanup/find')
-async def mail_cleanup_find(body: dict = Body(...)):
+def mail_cleanup_find(body: dict = Body(...)):
     """按条件筛选已转换邮件（条件 AND），附每封的磁盘占用"""
-    cfg = load_config()
-    export_dirs = [a['export_dir'] for a in _store.list_archives() if a.get('export_dir')]
+    archive_dirs = {a['id']: a.get('export_dir') for a in _store.list_archives()}
+    export_dirs = [d for d in archive_dirs.values() if d]
     rows = _store.find_mails(
         archive_id=body.get('archive_id') or 0,
         sender=(body.get('sender') or '').strip(),
@@ -405,6 +460,7 @@ async def mail_cleanup_find(body: dict = Body(...)):
     items = []
     total_bytes = 0
     for m in rows:
+        m['export_dir'] = archive_dirs.get(m.get('archive_id'))
         size = _mail_export_size(m, export_dirs)
         total_bytes += size
         items.append({
@@ -417,7 +473,7 @@ async def mail_cleanup_find(body: dict = Body(...)):
 
 
 @app.post('/api/mail-cleanup/delete')
-async def mail_cleanup_delete(body: dict = Body(...)):
+def mail_cleanup_delete(body: dict = Body(...)):
     """删除选中的已转换邮件。
 
     mode=index: 仅移出索引（磁盘文件保留）
@@ -435,9 +491,10 @@ async def mail_cleanup_delete(body: dict = Body(...)):
 
     freed = 0
     if mode == 'full':
-        cfg = load_config()
-        export_dirs = [a['export_dir'] for a in _store.list_archives() if a.get('export_dir')]
+        archive_dirs = {a['id']: a.get('export_dir') for a in _store.list_archives()}
+        export_dirs = [d for d in archive_dirs.values() if d]
         for m in mails:
+            m['export_dir'] = m.get('export_dir') or archive_dirs.get(m.get('archive_id'))
             for f in _mail_export_files(m, export_dirs):
                 try:
                     freed += f.stat().st_size
@@ -445,9 +502,8 @@ async def mail_cleanup_delete(body: dict = Body(...)):
                 except OSError:
                     pass
             # 清理可能因此变空的附件目录
-            if m.get('attachment_files'):
-                att_dir = Path(export_dirs[0] if export_dirs else '') \
-                    / Path(m['attachment_files'][0]).parent
+            if m.get('attachment_files') and m.get('export_dir'):
+                att_dir = Path(m['export_dir']) / Path(m['attachment_files'][0]).parent
                 try:
                     if att_dir.exists() and not any(att_dir.iterdir()):
                         att_dir.rmdir()
@@ -457,13 +513,8 @@ async def mail_cleanup_delete(body: dict = Body(...)):
     return {'deleted': deleted, 'mode': mode, 'freed_bytes': freed}
 
 
-@app.get('/api/sources')
-async def list_sources():
-    return {'sources': _store.list_sources()}
-
-
 @app.get('/api/stats')
-async def stats(source: str = Query(''), archive_id: int = Query(0)):
+def stats(source: str = Query(''), archive_id: int = Query(0)):
     if not archive_id and not source:
         archives = _store.list_archives()
         if not archives:
@@ -473,23 +524,45 @@ async def stats(source: str = Query(''), archive_id: int = Query(0)):
 
 
 @app.get('/api/mails')
-async def list_mails(
+def list_mails(
     source: str = Query(''),
     archive_id: int = Query(0),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=2000),
     search: str = Query(''),
     order: str = Query('date_desc'),
+    group: str = Query(''),
 ):
     if not archive_id and not source:
         archives = _store.list_archives()
         if not archives:
+            if group:
+                return {'total': 0, 'group': group, 'groups': []}
             return {'total': 0, 'page': page, 'per_page': per_page, 'items': []}
-    return _store.list_mails(source, archive_id, page, per_page, search, order)
+    if group and group not in ('subject', 'from', 'to'):
+        raise HTTPException(400, 'group 仅支持 subject / from / to')
+    return _store.list_mails(source, archive_id, page, per_page, search, order, group)
+
+
+@app.get('/api/mails/group_members')
+def list_group_members(
+    group: str = Query(...),
+    key: str = Query(''),
+    source: str = Query(''),
+    archive_id: int = Query(0),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(2000, ge=1, le=2000),
+    search: str = Query(''),
+    order: str = Query('date_desc'),
+):
+    if group not in ('subject', 'from', 'to'):
+        raise HTTPException(400, 'group 仅支持 subject / from / to')
+    return _store.list_group_members(group, key, source, archive_id, search,
+                                     page, per_page, order)
 
 
 @app.get('/api/mails/{mail_id}')
-async def get_mail(mail_id: int):
+def get_mail(mail_id: int):
     mail = _store.get_mail(mail_id)
     if not mail:
         raise HTTPException(404, '邮件不存在')
@@ -497,36 +570,111 @@ async def get_mail(mail_id: int):
 
 
 # ── 附件下载 ─────────────────────────────────────────────────────────────────
+def _safe_attachment_response(full: Path, display_name: str) -> FileResponse:
+    resp = FileResponse(str(full), filename=display_name)
+    # 导出文件一经写入不再变更，允许浏览器缓存（HTML 视图内嵌图翻页不重复下载）
+    resp.headers['Cache-Control'] = 'private, max-age=86400'
+    return resp
+
+
+def _resolve_export_file(rel: str, own_dir: str, all_dirs: list) -> Optional[Path]:
+    """在导出目录中定位一个相对路径文件；带防目录穿越校验"""
+    for ed in ([own_dir] if own_dir else []) + [d for d in all_dirs if d != own_dir]:
+        if not ed:
+            continue
+        root = Path(ed)
+        full = root / rel
+        try:
+            resolved = full.resolve()
+            if not resolved.is_relative_to(root.resolve()):
+                continue
+        except OSError:
+            continue
+        if resolved.exists():
+            return resolved
+    return None
+
+
 @app.get('/api/attachment/{mail_id}/{filename:path}')
-async def download_attachment(mail_id: int, filename: str):
-    mail = _store.get_mail(mail_id)
-    if not mail:
+def download_attachment(mail_id: int, filename: str):
+    view = _store.get_mail_attachment_view(mail_id)
+    if not view:
         raise HTTPException(404, '邮件不存在')
-    # 1) 按登记的附件清单匹配，在其存档导出目录中定位
-    for rel in mail['attachment_files']:
+    all_dirs = [a.get('export_dir') for a in _store.list_archives() if a.get('export_dir')]
+    own_dir = view.get('export_dir')
+    # 1) 按登记的附件清单精确/后缀匹配
+    for rel in view['attachment_files'] or []:
         if rel == filename or rel.endswith(filename) or filename in rel:
-            for arc in _store.list_archives():
-                if arc.get('export_dir'):
-                    full = Path(arc['export_dir']) / rel
-                    if full.exists():
-                        return FileResponse(str(full), filename=Path(rel).name)
-    # 2) 兜底：按相对路径在所有存档导出目录直接找（内嵌图等未登记文件）
-    for arc in _store.list_archives():
-        if arc.get('export_dir'):
-            full = Path(arc['export_dir']) / filename
-            if full.exists():
-                return FileResponse(str(full), filename=Path(filename).name)
+            full = _resolve_export_file(rel, own_dir, all_dirs)
+            if full:
+                return _safe_attachment_response(full, Path(rel).name)
+    # 2) 兜底：按相对路径直接找（内嵌图等未登记文件）
+    full = _resolve_export_file(filename, own_dir, all_dirs)
+    if full:
+        return _safe_attachment_response(full, Path(filename).name)
     raise HTTPException(404, '附件不存在')
+
+
+@app.get('/api/mails/{mail_id}/attachments/zip')
+def download_attachments_zip(mail_id: int):
+    """把一封邮件的全部附件打包为 zip 下载。
+
+    打包到临时文件再由 FileResponse 流式发出：zipfile 对不可回寻流的支持
+    在部分 Python 版本上会产生损坏的中心目录，文件路径是最稳妥的实现；
+    响应发送完毕后由后台任务删除临时文件，不占常驻内存。
+    """
+    view = _store.get_mail_attachment_view(mail_id)
+    if not view:
+        raise HTTPException(404, '邮件不存在')
+    all_dirs = [a.get('export_dir') for a in _store.list_archives() if a.get('export_dir')]
+    own_dir = view.get('export_dir')
+    entries = []
+    used = set()
+    for rel in view['attachment_files'] or []:
+        full = _resolve_export_file(rel, own_dir, all_dirs)
+        if not full:
+            continue
+        name = Path(rel).name
+        arc, n = name, 1
+        while arc in used:
+            stem, ext = os.path.splitext(name)
+            arc = f'{stem}_{n}{ext}'
+            n += 1
+        used.add(arc)
+        entries.append((arc, full))
+    if not entries:
+        raise HTTPException(404, '没有可下载的附件文件')
+
+    fd, tmp_path = tempfile.mkstemp(suffix='.zip', prefix='fox2md_zip_')
+    os.close(fd)
+    try:
+        with zipfile.ZipFile(tmp_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            for arc, full in entries:
+                zf.write(str(full), arcname=arc)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+    subject = view.get('subject') or ''
+    safe = re.sub(r'[\\/:*?"<>|\r\n]+', '_', subject).strip('. ')[:40]
+    zip_name = f'{safe}_attachments.zip' if safe else 'attachments.zip'
+    return FileResponse(
+        tmp_path, media_type='application/zip', filename=zip_name,
+        background=BackgroundTask(os.unlink, tmp_path))
+
 
 
 # ── 设置 ─────────────────────────────────────────────────────────────────────
 @app.get('/api/health')
-async def health():
+def health():
     """探活：供本机前端与外部智能体使用"""
     stats = _store.stats()
     return {
         'app': 'Fox Converter',
-        'version': '2.3.0',
+        'version': '2.3.1',
         'archives': len(_store.list_archives()),
         'emails': stats.get('total', 0),
         'auth_required': bool(load_config().get('api_key')),
@@ -534,8 +682,14 @@ async def health():
     }
 
 
+@app.get('/api/migration/status')
+async def migration_status():
+    """索引升级进度（前端据此提示"正在优化搜索索引"）"""
+    return dict(_migration)
+
+
 @app.get('/api/agent-key')
-async def get_agent_key():
+def get_agent_key():
     """获取（不存在则生成）Agent 接入 API Key"""
     cfg = load_config()
     if not cfg.get('api_key'):
@@ -553,7 +707,7 @@ async def get_agent_key():
 
 
 @app.post('/api/agent-key/regenerate')
-async def regenerate_agent_key():
+def regenerate_agent_key():
     import secrets
     cfg = load_config()
     cfg['api_key'] = secrets.token_hex(16)
@@ -562,7 +716,7 @@ async def regenerate_agent_key():
 
 
 @app.get('/skill/SKILL.md')
-async def skill_md():
+def skill_md():
     f = SKILL_DIR / 'SKILL.md'
     if not f.exists():
         raise HTTPException(404, '技能文件缺失')
@@ -570,10 +724,8 @@ async def skill_md():
 
 
 @app.get('/skill/download')
-async def skill_download():
+def skill_download():
     """打包技能为 zip 供智能体下载安装"""
-    import io
-    import zipfile
     f = SKILL_DIR / 'SKILL.md'
     if not f.exists():
         raise HTTPException(404, '技能文件缺失')
@@ -598,17 +750,26 @@ def _dir_size(p: Path) -> int:
     return total
 
 
+_dir_size_cache = {'path': None, 'size': 0, 'at': 0.0}
+
+
 @app.get('/api/paths')
-async def get_paths():
+def get_paths():
+    """存储位置信息。导出目录体积遍历整棵树（可达数 GB），加 30s 缓存避免设置页反复全扫"""
     cfg = load_config()
     data_dir = get_data_dir(cfg)
     export_dir = get_export_dir(cfg)
     db_file = get_db_path(cfg)
+    now = time.time()
+    if (_dir_size_cache['path'] != str(export_dir)
+            or now - _dir_size_cache['at'] > 30):
+        _dir_size_cache.update(path=str(export_dir), at=now,
+                               size=_dir_size(export_dir) if export_dir.exists() else 0)
     return {
         'data_dir': str(data_dir),
         'data_size': db_file.stat().st_size if db_file.exists() else 0,
         'export_dir': str(export_dir),
-        'export_size': _dir_size(export_dir) if export_dir.exists() else 0,
+        'export_size': _dir_size_cache['size'],
         # 导出目录是否已由用户显式设置（未设置时不允许导入，防止误写系统默认盘）
         'export_configured': bool(cfg.get('export_dir')),
         'data_configured': bool(cfg.get('data_dir')),
@@ -624,7 +785,7 @@ async def browse_dir():
 
 
 @app.post('/api/migrate')
-async def migrate(body: dict = Body(...)):
+def migrate(body: dict = Body(...)):
     """迁移存储位置。
 
     data_dir: 在线复制数据库并即时切换（无需重启）。
@@ -657,8 +818,10 @@ async def migrate(body: dict = Body(...)):
         except Exception:
             new_store = None
         if new_store is not None:
-            _store = new_store
-            # 清理旧库文件释放空间；可能被杀软实时扫描短暂锁定，重试数秒
+            old_store, _store = _store, new_store
+            # 显式关闭旧库连接（新模型不再依赖 GC），再清理文件释放空间；
+            # 可能仍被杀软实时扫描短暂锁定，重试数秒
+            old_store.close()
             import gc
             for suffix in ('', '-shm', '-wal'):
                 for _ in range(8):
@@ -738,12 +901,12 @@ async def migrate_status(task_id: str):
 
 
 @app.get('/api/settings')
-async def get_settings():
+def get_settings():
     return load_config()
 
 
 @app.put('/api/settings')
-async def update_settings(body: dict = Body(...)):
+def update_settings(body: dict = Body(...)):
     live = load_config()
     live.update(body)
     save_config(live)

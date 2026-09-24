@@ -23,7 +23,8 @@ Fox Converter 在本地把 .fox 拆开——里面其实是标准的邮件数据
 ## 功能
 
 - **一键导入**：支持选择多个 .fox 文件或整个文件夹，批量转换带双层进度
-- **本地阅读界面**：邮件列表（中文全文搜索 / 按主题-发件人-收件人分组）+ 三种正文视图（原文 / Markdown / 纯文本）+ 附件独立下载
+- **本地阅读界面**：邮件列表（中文全文搜索 / 按主题-发件人-收件人分组）+ 三种正文视图（原文 / Markdown / 纯文本）+ 附件单独下载或一键打包 zip
+- **为大体量优化（v2.3.1）**：正文全文搜索走 SQLite FTS5 trigram 索引（中英文子串，毫秒级），分组在 SQL 端全量完成不再截断，导入按存档文件批量提交，万封级存档搜索 / 分组 / 翻页即点即开
 - **结构化导出**：`markdown/`（YAML front matter）+ `plaintext/`（含邮件头摘要的 txt）+ `attachments/`，`manifest.json` 索引全部邮件——直接对接 openclaw / WinClaw 等 AI 工具的 RAG 流程
 - **存档管理**：已导入存档独立管理，跨存档 Message-ID 去重，按存档删除
 - **存储位置自定义**：数据库与导出文件可放到任意磁盘，支持在线迁移
@@ -33,7 +34,7 @@ Fox Converter 在本地把 .fox 拆开——里面其实是标准的邮件数据
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/wb2951516-collab/fox-converter/releases) 下载 `FoxConverter_Setup_v2.3.0.exe` 安装（无需管理员权限）
+1. 从 [Releases](https://github.com/wb2951516-collab/fox-converter/releases) 下载 `FoxConverter_Setup_v2.3.1.exe` 安装（无需管理员权限）
 2. 首次打开：按引导把存储位置设到空间够的盘（不设置无法导入）
 3. 点「导入 .fox 文件」，选择存档，等待转换完成
 4. 开始阅读、搜索，或把导出目录接入你的 AI 工具
@@ -106,7 +107,8 @@ Foxmail's archive feature (.fox files) is a closed format with no official expor
 ### Features
 
 - Batch import of .fox files (multi-select or whole folders) with dual-level progress
-- Local web UI: mail list (Chinese full-text search, thread grouping by subject/sender/recipient), original HTML / Markdown / plain-text views, per-mail attachment downloads
+- Local web UI: mail list (Chinese full-text search, grouping by subject/sender/recipient), original HTML / Markdown / plain-text views, per-attachment downloads or one-click zip of all
+- Tuned for large archives (v2.3.1): body search indexed via SQLite FTS5 trigram (CJK & Latin substrings, millisecond-level), SQL-side grouping over the full corpus, per-file batched imports — instant list / search / grouping at tens of thousands of emails
 - Structured export: `markdown/` + `plaintext/` + `attachments/` + `manifest.json` — ready for openclaw / WinClaw / Claude RAG workflows
 - Archive management with cross-archive Message-ID dedup, per-archive deletion
 - Relocatable data & export directories with online migration
@@ -115,7 +117,7 @@ Foxmail's archive feature (.fox files) is a closed format with no official expor
 
 ### Quick start
 
-Download `FoxConverter_Setup_v2.3.0.exe` from [Releases](https://github.com/wb2951516-collab/fox-converter/releases), install (no admin required), point the storage location to a roomy drive, and import your `.fox` archives. A sample archive ([examples/demo.fox](examples/demo.fox), 3 fictional emails) is included for a quick tour.
+Download `FoxConverter_Setup_v2.3.1.exe` from [Releases](https://github.com/wb2951516-collab/fox-converter/releases), install (no admin required), point the storage location to a roomy drive, and import your `.fox` archives. A sample archive ([examples/demo.fox](examples/demo.fox), 3 fictional emails) is included for a quick tour.
 
 ### How it works
 
